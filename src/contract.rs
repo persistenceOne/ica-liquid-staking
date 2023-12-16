@@ -29,9 +29,7 @@ pub fn instantiate(
 
     ASSETS.save(deps.storage, &msg.assets)?;
 
-    let ls_config = LsConfig {
-        active: Some(true),
-    };
+    let ls_config = LsConfig { active: Some(true) };
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
     // we begin with no liquidity staked
@@ -92,8 +90,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
 
             if let Some(config) = ls_config {
                 LS_CONFIG.save(deps.storage, &config)?;
-                response = response
-                    .add_attribute("active", config.active.unwrap().to_string());
+                response = response.add_attribute("active", config.active.unwrap().to_string());
             }
 
             Ok(response)
@@ -107,7 +104,7 @@ mod tests {
 
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_json, Addr, CosmosMsg, ReplyOn, SubMsg, BankMsg};
+    use cosmwasm_std::{coins, from_json, Addr, BankMsg, CosmosMsg, ReplyOn, SubMsg};
     use persistence_std::types::cosmos::base::v1beta1::Coin as StdCoin;
     use persistence_std::types::pstake::liquidstakeibc::v1beta1::MsgLiquidStake;
 
@@ -170,7 +167,8 @@ mod tests {
                             amount: "2".to_string(),
                         }),
                         delegator_address: "cosmos2contract".to_string(),
-                    }.into(),
+                    }
+                    .into(),
                 },
                 gas_limit: None,
                 reply_on: ReplyOn::Never

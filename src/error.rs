@@ -13,10 +13,7 @@ pub enum ContractError {
     NotActive {},
 
     #[error("Invalid denom {denom}, expected {expected}")]
-    InvalidDenom {
-        denom: String,
-        expected: String,
-    },
+    InvalidDenom { denom: String, expected: String },
 
     #[error("Invalid amount")]
     InvalidAmount {},

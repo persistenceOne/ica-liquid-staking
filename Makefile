@@ -4,10 +4,14 @@ BUILDDIR ?= $(CURDIR)/build
 build:
 	cargo wasm
 
+.PHONY: fmt
+fmt:
+  cargo fmt
+
 build-debug:
 	cargo wasm-debug
 
-build-optimized:
+build-optimized: fmt build
 	docker run --rm -v "$(CURDIR)":/code \
 		--mount type=volume,source="$(notdir $(CURDIR))_cache",target=/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \

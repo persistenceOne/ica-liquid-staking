@@ -21,9 +21,7 @@ pub struct AssetData {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    LiquidStake {
-        receiver: Addr,
-    },
+    LiquidStake { receiver: Addr },
 }
 
 #[cw_serde]
