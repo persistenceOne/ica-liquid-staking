@@ -8,6 +8,16 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
-    // Add any other custom errors you like here.
-    // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
+
+    #[error("Not active")]
+    NotActive {},
+
+    #[error("Invalid denom {denom}, expected {expected}")]
+    InvalidDenom {
+        denom: String,
+        expected: String,
+    },
+
+    #[error("Invalid amount")]
+    InvalidAmount {},
 }
