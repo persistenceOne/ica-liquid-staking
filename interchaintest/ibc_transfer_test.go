@@ -37,7 +37,10 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 			NumFullNodes:  &numFullNodes,
 		},
 		{
-			Name:          "gaia",
+			Name: "gaia",
+			ChainConfig: ibc.ChainConfig{
+				GasPrices: "0.0uatom",
+			},
 			Version:       "v9.1.0",
 			NumValidators: &numVals,
 			NumFullNodes:  &numFullNodes,
