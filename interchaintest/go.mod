@@ -10,7 +10,10 @@ require (
 	go.uber.org/zap v1.25.0
 )
 
-require github.com/CosmWasm/wasmvm v1.3.0 // indirect
+require (
+	github.com/CosmWasm/wasmvm v1.3.0 // indirect
+	github.com/persistenceOne/persistence-sdk/v2 v2.1.1 // indirect
+)
 
 require (
 	cloud.google.com/go v0.110.7 // indirect
