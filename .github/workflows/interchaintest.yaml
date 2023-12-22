@@ -1,0 +1,23 @@
+name: Interchain Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-ibc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.21
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.21
+
+      - name: checkout code
+        uses: actions/checkout@v3
+
+      - run: make ictest-ibc
+        env:
+          BRANCH_CI: 'latest'

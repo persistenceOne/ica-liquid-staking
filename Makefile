@@ -6,7 +6,7 @@ build:
 
 .PHONY: fmt
 fmt:
-  cargo fmt
+	cargo fmt
 
 build-debug:
 	cargo wasm-debug
@@ -36,3 +36,11 @@ ibc-liquid-stake:
 # Queries all metrics stored in the contract
 query-all:
 	bash scripts/query.sh
+
+###############################################################################
+###                             Interchain test                             ###
+###############################################################################
+
+# Executes IBC tests via interchaintest
+ictest-ibc:
+	cd interchaintest && go test -timeout=25m -race -v -run TestPersistenceGaiaIBCTransfer .
