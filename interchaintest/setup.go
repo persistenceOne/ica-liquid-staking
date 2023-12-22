@@ -12,6 +12,7 @@ import (
 	testutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	ibclocalhost "github.com/cosmos/ibc-go/v7/modules/light-clients/09-localhost"
 	liquidstaketypes "github.com/persistenceOne/pstake-native/v2/x/liquidstake/types"
+	liquidstakeibctypes "github.com/persistenceOne/pstake-native/v2/x/liquidstakeibc/types"
 	interchaintest "github.com/strangelove-ventures/interchaintest/v7"
 	"github.com/strangelove-ventures/interchaintest/v7/chain/cosmos"
 	"github.com/strangelove-ventures/interchaintest/v7/ibc"
@@ -26,8 +27,8 @@ var (
 	IBCRelayerVersion  = "main"
 
 	PersistenceCoreImage = ibc.DockerImage{
-		Repository: "persistence",
-		Version:    "local",
+		Repository: "persistenceone/persistencecore",
+		Version:    "v10.2.1-fh",
 		UidGid:     "1025:1025",
 	}
 
@@ -66,6 +67,7 @@ func persistenceEncoding() *testutil.TestEncodingConfig {
 	ibclocalhost.RegisterInterfaces(cfg.InterfaceRegistry)
 	wasmtypes.RegisterInterfaces(cfg.InterfaceRegistry)
 	liquidstaketypes.RegisterInterfaces(cfg.InterfaceRegistry)
+  liquidstakeibctypes.RegisterInterfaces(cfg.InterfaceRegistry)
 
 	return &cfg
 }
