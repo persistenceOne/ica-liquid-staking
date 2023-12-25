@@ -53,6 +53,33 @@ var (
 			Key:   "app_state.builder.params.min_bid_increment.denom",
 			Value: helpers.PersistenceBondDenom,
 		},
+		{
+			Key:   "app_state.wasm.params.code_upload_access.permission",
+			Value: "Everybody",
+		},
+		{
+			Key:   "app_state.wasm.params.instantiate_default_permission",
+			Value: "Everybody",
+		},
+		{
+			Key: "app_state.interchainaccounts.host_genesis_state.params.allow_messages",
+			Value: []string{
+				"/cosmos.bank.v1beta1.MsgSend",
+				"/cosmos.bank.v1beta1.MsgMultiSend",
+				"/cosmos.staking.v1beta1.MsgDelegate",
+				"/cosmos.staking.v1beta1.MsgUndelegate",
+				"/cosmos.staking.v1beta1.MsgBeginRedelegate",
+				"/cosmos.staking.v1beta1.MsgRedeemTokensforShares",
+				"/cosmos.staking.v1beta1.MsgTokenizeShares",
+				"/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward",
+				"/cosmos.distribution.v1beta1.MsgSetWithdrawAddress",
+				"/ibc.applications.transfer.v1.MsgTransfer",
+			},
+		},
+		{
+			Key:   "app_state.liquidstakeibc.params.admin_address",
+			Value: "persistence1u20df3trc2c2zdhm8qvh2hdjx9ewh00spalt70", // admin
+		},
 	}
 
 	genesisWalletAmount = int64(10_000_000)
@@ -67,7 +94,7 @@ func persistenceEncoding() *testutil.TestEncodingConfig {
 	ibclocalhost.RegisterInterfaces(cfg.InterfaceRegistry)
 	wasmtypes.RegisterInterfaces(cfg.InterfaceRegistry)
 	liquidstaketypes.RegisterInterfaces(cfg.InterfaceRegistry)
-  liquidstakeibctypes.RegisterInterfaces(cfg.InterfaceRegistry)
+	liquidstakeibctypes.RegisterInterfaces(cfg.InterfaceRegistry)
 
 	return &cfg
 }

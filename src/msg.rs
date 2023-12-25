@@ -9,7 +9,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub struct LsConfig {
     /// Flag to enable/disable the contract
-    pub active: Option<bool>,
+    pub active: bool,
 }
 
 /// holds the native and ls asset denoms relevant for providing liquidity.

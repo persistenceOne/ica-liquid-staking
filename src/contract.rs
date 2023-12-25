@@ -29,7 +29,7 @@ pub fn instantiate(
 
     ASSETS.save(deps.storage, &msg.assets)?;
 
-    let ls_config = LsConfig { active: Some(true) };
+    let ls_config = LsConfig { active: true };
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
     // we begin with no liquidity staked
@@ -90,7 +90,7 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
 
             if let Some(config) = ls_config {
                 LS_CONFIG.save(deps.storage, &config)?;
-                response = response.add_attribute("active", config.active.unwrap().to_string());
+                response = response.add_attribute("active", config.active.to_string());
             }
 
             Ok(response)
@@ -127,7 +127,7 @@ mod tests {
         // it worked, let's query the state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::LsConfig {}).unwrap();
         let value: LsConfig = from_json(&res).unwrap();
-        assert_eq!(true, value.active.unwrap());
+        assert_eq!(true, value.active);
 
         let res = query(deps.as_ref(), mock_env(), QueryMsg::Assets {}).unwrap();
         let value: AssetData = from_json(&res).unwrap();

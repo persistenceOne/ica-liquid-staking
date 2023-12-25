@@ -17,7 +17,7 @@ pub fn try_liquid_staking(
     deps.api.debug("WASMDEBUG: ls execute");
     let config = LS_CONFIG.load(deps.storage)?;
 
-    if config.active.is_none() || !config.active.unwrap() {
+    if !config.active {
         return Err(ContractError::NotActive {});
     }
 
