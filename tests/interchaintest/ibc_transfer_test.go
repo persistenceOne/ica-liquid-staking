@@ -102,7 +102,7 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 	const (
 		ibcPath  = "ibc-path"
 		stkDenom = "stk/uatom"
-		wasmPath = "../artifacts/ica_liquid_staking.wasm"
+		wasmPath = "../../artifacts/ica_liquid_staking.wasm"
 	)
 
 	// Get chains from the chain factory
