@@ -17,10 +17,10 @@
 .cache
 
 # Build artifacts
-*.wasm
+# *.wasm
 hash.txt
 contracts.txt
-artifacts/
+# artifacts/
 
 # tests
 **/metadata

@@ -1,0 +1,1 @@
+07113c9f71d12e7aff9306596a96de8ff64606d9e2294d86e17ca9db24d10299  /target/wasm32-unknown-unknown/release/ica_liquid_staking.wasm
