@@ -27,8 +27,8 @@ var (
 	IBCRelayerVersion  = "main"
 
 	PersistenceCoreImage = ibc.DockerImage{
-		Repository: "persistenceone/persistencecore",
-		Version:    "v10.2.1-fh",
+		Repository: "nabaruns/persistencecore",
+		Version:    "latest",
 		UidGid:     "1025:1025",
 	}
 

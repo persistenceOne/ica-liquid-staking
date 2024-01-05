@@ -29,13 +29,16 @@ pub fn instantiate(
 
     ASSETS.save(deps.storage, &msg.assets)?;
 
-    let ls_config = LsConfig { active: true };
+    let ls_config = LsConfig {
+        active: true,
+        chain_id: msg.chain_id,
+    };
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
     // we begin with no liquidity staked
     STAKED_LIQUIDITY_INFO.save(
         deps.storage,
-        &&StakedLiquidityInfo {
+        &StakedLiquidityInfo {
             staked_amount_native: Uint128::zero(),
         },
     )?;
@@ -100,29 +103,124 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, Co
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use crate::execute::LIQUIDSTAKEIBC_RATE_QUERY_TYPE;
     use crate::msg::AssetData;
 
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_json, Addr, BankMsg, CosmosMsg, ReplyOn, SubMsg};
+    use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage};
+    use cosmwasm_std::{
+        attr, coins, from_json, Addr, BankMsg, CosmosMsg, Decimal, Empty, OwnedDeps, Querier,
+        QuerierResult, QueryRequest, ReplyOn, SubMsg, SystemError, SystemResult,
+    };
     use persistence_std::types::cosmos::base::v1beta1::Coin as StdCoin;
-    use persistence_std::types::pstake::liquidstakeibc::v1beta1::MsgLiquidStake;
+    use persistence_std::types::pstake::liquidstakeibc::v1beta1::{
+        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse,
+    };
 
-    #[test]
-    fn proper_initialization() {
-        let mut deps = mock_dependencies();
+    const MOCK_CHAIN_ID: &str = "chain-1";
+    const NATIVE_DENOM: &str = "token";
+    const LIQUIDSTAKE_DENOM: &str = "stk/token";
+
+    pub struct WasmMockQuerier {
+        pub exchange_rate: HashMap<String, QueryExchangeRateResponse>,
+    }
+
+    // Implements the Querier trait to be used as a MockQuery object
+    impl Querier for WasmMockQuerier {
+        fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
+            let request: QueryRequest<Empty> = match from_json(bin_request) {
+                Ok(v) => v,
+                Err(e) => {
+                    return SystemResult::Err(SystemError::InvalidRequest {
+                        error: format!("Parsing query request: {}", e),
+                        request: bin_request.into(),
+                    })
+                }
+            };
+            self.handle_query(&request)
+        }
+    }
+
+    impl WasmMockQuerier {
+        pub fn new() -> Self {
+            WasmMockQuerier {
+                exchange_rate: HashMap::new(),
+            }
+        }
+
+        fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
+            match request {
+                QueryRequest::Stargate { path, data: _ } => {
+                    if path == LIQUIDSTAKEIBC_RATE_QUERY_TYPE {
+                        let exchange_rate_request: QueryExchangeRateRequest =
+                            QueryExchangeRateRequest {
+                                chain_id: MOCK_CHAIN_ID.to_string(),
+                            };
+                        match self.exchange_rate.get(&exchange_rate_request.chain_id) {
+                            Some(resp) => SystemResult::Ok(to_json_binary(&resp).into()),
+                            None => SystemResult::Err(SystemError::Unknown {}),
+                        }
+                    } else {
+                        panic!("Mocked query not supported for stargate path {}", path);
+                    }
+                }
+                _ => panic!("DO NOT ENTER HERE"),
+            }
+        }
+
+        pub fn mock_exchange_rate(&mut self, chain_id: String, rate: String) {
+            self.exchange_rate
+                .insert(chain_id, QueryExchangeRateResponse { rate });
+        }
+    }
+
+    // Helper function to instantiate the contract
+    fn default_instantiate() -> (
+        OwnedDeps<MockStorage, MockApi, WasmMockQuerier, Empty>,
+        Env,
+        MessageInfo,
+    ) {
+        let env = mock_env();
+        let info = mock_info("creator", &[]);
+
+        let custom_querier: WasmMockQuerier = WasmMockQuerier::new();
+
+        let mut deps = OwnedDeps {
+            storage: MockStorage::default(),
+            api: MockApi::default(),
+            querier: custom_querier,
+            custom_query_type: Default::default(),
+        };
 
         let msg = InstantiateMsg {
             assets: AssetData {
-                native_asset_denom: "earth".to_string(),
-                ls_asset_denom: "stk/earth".to_string(),
+                native_asset_denom: NATIVE_DENOM.to_string(),
+                ls_asset_denom: LIQUIDSTAKE_DENOM.to_string(),
             },
+            chain_id: MOCK_CHAIN_ID.to_string(),
         };
-        let info = mock_info("creator", &coins(1000, "earth"));
 
-        // we can just call .unwrap() to assert this was a success
-        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-        assert_eq!(0, res.messages.len());
+        let resp = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+        assert_eq!(
+            resp.attributes,
+            vec![
+                attr("method", "instantiate"),
+                attr("owner", "creator"),
+                attr("active", "true"),
+                attr("ls_asset_denom", LIQUIDSTAKE_DENOM),
+                attr("native_asset_denom", NATIVE_DENOM),
+            ]
+        );
+
+        (deps, env, info)
+    }
+
+    #[test]
+    fn proper_initialization() {
+        let (deps, _env, _info) = default_instantiate();
 
         // it worked, let's query the state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::LsConfig {}).unwrap();
@@ -131,25 +229,23 @@ mod tests {
 
         let res = query(deps.as_ref(), mock_env(), QueryMsg::Assets {}).unwrap();
         let value: AssetData = from_json(&res).unwrap();
-        assert_eq!("earth", value.native_asset_denom);
-        assert_eq!("stk/earth", value.ls_asset_denom);
+        assert_eq!(NATIVE_DENOM, value.native_asset_denom);
+        assert_eq!(LIQUIDSTAKE_DENOM, value.ls_asset_denom);
     }
 
     #[test]
     fn liquid_stake() {
-        let mut deps = mock_dependencies();
+        let (mut deps, _env, _info) = default_instantiate();
 
-        let msg = InstantiateMsg {
-            assets: AssetData {
-                native_asset_denom: "token".to_string(),
-                ls_asset_denom: "stk/token".to_string(),
-            },
-        };
-        let info = mock_info("creator", &coins(2, "token"));
-        let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let deposit_amount = Uint128::from(2000u128);
+        let exchange_rate = "0.825537496882794638";
+
+        // Mock each pool in the querier
+        deps.querier
+            .mock_exchange_rate(MOCK_CHAIN_ID.to_string(), exchange_rate.to_string());
 
         // beneficiary can release it
-        let info = mock_info("anyone", &coins(2, "token"));
+        let info = mock_info("anyone", &coins(deposit_amount.into(), "token"));
         let msg = ExecuteMsg::LiquidStake {
             receiver: Addr::unchecked("receiver"),
         };
@@ -163,8 +259,8 @@ mod tests {
                     type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
                     value: MsgLiquidStake {
                         amount: Some(StdCoin {
-                            denom: "token".to_string(),
-                            amount: "2".to_string(),
+                            denom: NATIVE_DENOM.to_string(),
+                            amount: deposit_amount.to_string(),
                         }),
                         delegator_address: "cosmos2contract".to_string(),
                     }
@@ -174,13 +270,21 @@ mod tests {
                 reply_on: ReplyOn::Never
             }
         );
+
+        let expected_staked_amount = Decimal::to_uint_floor(
+            Decimal::from_str(&deposit_amount.to_string())
+                .unwrap()
+                .checked_mul(Decimal::from_str(exchange_rate).unwrap())
+                .unwrap(),
+        );
+
         assert_eq!(
             res.messages[1],
             SubMsg {
                 id: 0,
                 msg: CosmosMsg::Bank(BankMsg::Send {
                     to_address: "receiver".to_string(),
-                    amount: coins(2, "stk/token"),
+                    amount: coins(expected_staked_amount.into(), LIQUIDSTAKE_DENOM),
                 })
                 .into(),
                 gas_limit: None,
@@ -188,9 +292,22 @@ mod tests {
             }
         );
 
+        // ensure attributes are set
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("action", "liquid_stake"),
+                attr("amount", deposit_amount.to_string()),
+                attr("staked_amount", expected_staked_amount.to_string()),
+                attr("exchange_rate", exchange_rate),
+                attr("denom", NATIVE_DENOM),
+                attr("receiver", "receiver"),
+            ]
+        );
+
         // ensure we can query the staked amount
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStakedLiquidity {}).unwrap();
         let value: StakedLiquidityInfo = from_json(&res).unwrap();
-        assert_eq!(2, value.staked_amount_native.u128());
+        assert_eq!(deposit_amount, value.staked_amount_native);
     }
 }

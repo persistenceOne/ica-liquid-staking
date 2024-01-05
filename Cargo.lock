@@ -231,7 +231,7 @@ dependencies = [
  "cw-utils",
  "derivative",
  "itertools 0.11.0",
- "prost",
+ "prost 0.12.3",
  "schemars",
  "serde",
  "sha2 0.10.8",
@@ -462,8 +462,10 @@ dependencies = [
  "cosmwasm-std",
  "cw-multi-test",
  "cw-storage-plus",
+ "cw-utils",
  "cw2",
  "persistence-std",
+ "prost 0.11.9",
  "schemars",
  "serde",
  "thiserror",
@@ -543,7 +545,7 @@ dependencies = [
  "chrono",
  "cosmwasm-std",
  "persistence-std-derive",
- "prost",
+ "prost 0.12.3",
  "prost-types",
  "schemars",
  "serde",
@@ -585,6 +587,15 @@ dependencies = [
 
 [[package]]
 name = "prost"
+version = "0.11.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
+dependencies = [
+ "bytes",
+]
+
+[[package]]
+name = "prost"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "146c289cda302b98a28d40c8b3b90498d6e526dd24ac2ecea73e4e491685b94a"
@@ -612,7 +623,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "193898f59edcf43c26227dcd4c8427f00d99d61e95dcde58dabd49fa291d470e"
 dependencies = [
- "prost",
+ "prost 0.12.3",
 ]
 
 [[package]]
