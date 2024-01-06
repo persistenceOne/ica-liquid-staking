@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use crate::{
     error::ContractError,
     execute,
-    msg::{ExecuteMsg, InstantiateMsg, LsConfig, MigrateMsg, QueryMsg, StakedLiquidityInfo},
+    msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg, StakedLiquidityInfo},
     query,
     state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
 };
@@ -73,31 +73,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::Assets {} => to_json_binary(&query::query_assets(deps)?),
         QueryMsg::LsConfig {} => to_json_binary(&query::query_ls_config(deps)?),
-    }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
-    deps.api.debug("WASMDEBUG: migrate");
-
-    match msg {
-        MigrateMsg::UpdateConfig { assets, ls_config } => {
-            let mut response = Response::default().add_attribute("method", "update_config");
-
-            if let Some(denoms) = assets {
-                ASSETS.save(deps.storage, &denoms)?;
-                response = response.add_attribute("ls_denom", denoms.ls_asset_denom.to_string());
-                response =
-                    response.add_attribute("native_denom", denoms.native_asset_denom.to_string());
-            }
-
-            if let Some(config) = ls_config {
-                LS_CONFIG.save(deps.storage, &config)?;
-                response = response.add_attribute("active", config.active.to_string());
-            }
-
-            Ok(response)
-        }
     }
 }
 
@@ -309,5 +284,55 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStakedLiquidity {}).unwrap();
         let value: StakedLiquidityInfo = from_json(&res).unwrap();
         assert_eq!(deposit_amount, value.staked_amount_native);
+    }
+
+    #[test]
+    fn liquid_stake_with_invalid_amount() {
+        let (mut deps, _env, _info) = default_instantiate();
+
+        let deposit_amount = Uint128::from(0u128);
+        let exchange_rate = "0.825537496882794638";
+
+        // Mock each pool in the querier
+        deps.querier
+            .mock_exchange_rate(MOCK_CHAIN_ID.to_string(), exchange_rate.to_string());
+
+        // beneficiary can release it
+        let info = mock_info("anyone", &coins(deposit_amount.u128(), "token"));
+        let msg = ExecuteMsg::LiquidStake {
+            receiver: Addr::unchecked("receiver"),
+        };
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        match res {
+            Err(ContractError::PaymentError(e)) => {
+                assert_eq!(e, "No funds sent")
+            }
+            _ => panic!("DO NOT ENTER HERE"),
+        }
+    }
+
+    #[test]
+    fn liquid_stake_with_invalid_denom() {
+        let (mut deps, _env, _info) = default_instantiate();
+
+        let deposit_amount = Uint128::from(1000u128);
+        let exchange_rate = "0.825537496882794638";
+
+        // Mock each pool in the querier
+        deps.querier
+            .mock_exchange_rate(MOCK_CHAIN_ID.to_string(), exchange_rate.to_string());
+
+        // beneficiary can release it
+        let info = mock_info("anyone", &coins(deposit_amount.u128(), "invalidtoken"));
+        let msg = ExecuteMsg::LiquidStake {
+            receiver: Addr::unchecked("receiver"),
+        };
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        match res {
+            Err(ContractError::PaymentError(e)) => {
+                assert_eq!(e, "Must send reserve token 'token'")
+            }
+            _ => panic!("DO NOT ENTER HERE"),
+        }
     }
 }

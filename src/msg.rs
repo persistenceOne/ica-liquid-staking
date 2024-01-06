@@ -39,14 +39,6 @@ pub enum QueryMsg {
     LsConfig {},
 }
 
-#[cw_serde]
-pub enum MigrateMsg {
-    UpdateConfig {
-        assets: Option<AssetData>,
-        ls_config: Option<LsConfig>,
-    },
-}
-
 /// keeps track of provided asset liquidity in `Uint128`.
 #[cw_serde]
 pub struct StakedLiquidityInfo {

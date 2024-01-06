@@ -40,7 +40,7 @@ pub fn try_liquid_staking(
     let amount: Uint128 = match must_pay(&info, &denom) {
         Ok(coin_amount) => coin_amount,
         Err(e) => {
-            return Err(ContractError::InvalidDenom { e });
+            return Err(ContractError::PaymentError(e.to_string()));
         }
     };
 

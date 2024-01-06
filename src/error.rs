@@ -1,4 +1,4 @@
-use cosmwasm_std::{CheckedFromRatioError, OverflowError, StdError};
+use cosmwasm_std::{OverflowError, StdError};
 use cw_utils::PaymentError;
 use thiserror::Error;
 
@@ -13,17 +13,14 @@ pub enum ContractError {
     #[error("Not active")]
     NotActive {},
 
-    #[error("Invalid denom : {e}")]
-    InvalidDenom { e: PaymentError },
-
     #[error("Invalid amount")]
     InvalidAmount {},
 
     #[error("Invalid asset")]
     InvalidAsset {},
 
-    #[error("Divide ratio error: {0}")]
-    CheckedDivideRatioError(String),
+    #[error("Payment error: {0}")]
+    PaymentError(String),
 }
 
 impl From<OverflowError> for ContractError {
@@ -32,17 +29,8 @@ impl From<OverflowError> for ContractError {
     }
 }
 
-impl From<CheckedFromRatioError> for ContractError {
-    fn from(e: CheckedFromRatioError) -> Self {
-        ContractError::CheckedDivideRatioError(e.to_string())
-    }
-}
-
-impl From<ContractError> for StdError {
-    fn from(source: ContractError) -> Self {
-        match source {
-            ContractError::Std(e) => e,
-            e => StdError::generic_err(format!("{}", e)),
-        }
+impl From<PaymentError> for ContractError {
+    fn from(e: PaymentError) -> Self {
+        ContractError::PaymentError(e.to_string())
     }
 }
