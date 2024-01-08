@@ -1,15 +1,16 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Reply,
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult, Uint128,
 };
 use cw2::set_contract_version;
 
 use crate::{
     error::ContractError,
-    execute::{handle_ls_reply, try_liquid_staking, LS_REPLY_ID},
+    execute::{try_liquid_staking, LS_REPLY_ID},
     msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg, StakedLiquidityInfo},
     query,
+    reply::handle_ls_reply,
     state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
 };
 
@@ -59,9 +60,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::LiquidStake { receiver } => {
-            try_liquid_staking(deps, env, info, receiver)
-        }
+        ExecuteMsg::LiquidStake { receiver } => try_liquid_staking(deps, env, info, receiver),
     }
 }
 
@@ -91,12 +90,14 @@ mod tests {
 
     use crate::execute::LIQUIDSTAKEIBC_RATE_QUERY_TYPE;
     use crate::msg::AssetData;
+    use crate::state::{LSInfo, CURRENT_TX};
 
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage};
     use cosmwasm_std::{
-        attr, coins, from_json, Addr, BankMsg, CosmosMsg, Decimal, Empty, OwnedDeps, Querier,
-        QuerierResult, QueryRequest, ReplyOn, SubMsg, SystemError, SystemResult,
+        attr, coins, from_json, Addr, BalanceResponse, BankMsg, BankQuery, Coin, ContractResult,
+        CosmosMsg, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, ReplyOn,
+        SubMsg, SubMsgResponse, SystemError, SystemResult,
     };
     use persistence_std::types::cosmos::base::v1beta1::Coin as StdCoin;
     use persistence_std::types::pstake::liquidstakeibc::v1beta1::{
@@ -148,6 +149,21 @@ mod tests {
                         }
                     } else {
                         panic!("Mocked query not supported for stargate path {}", path);
+                    }
+                }
+                QueryRequest::Bank(BankQuery::Balance { address, denom }) => {
+                    if address == &Addr::unchecked("cosmos2contract")
+                        && denom == &LIQUIDSTAKE_DENOM.to_string()
+                    {
+                        let bank_res = BalanceResponse {
+                            amount: Coin {
+                                amount: Uint128::new(2000u128),
+                                denom: denom.to_string(),
+                            },
+                        };
+                        SystemResult::Ok(ContractResult::from(to_json_binary(&bank_res)))
+                    } else {
+                        unimplemented!()
                     }
                 }
                 _ => panic!("DO NOT ENTER HERE"),
@@ -233,11 +249,11 @@ mod tests {
             receiver: Addr::unchecked("receiver"),
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-        assert_eq!(2, res.messages.len());
+        assert_eq!(1, res.messages.len());
         assert_eq!(
             res.messages[0],
             SubMsg {
-                id: 0,
+                id: 1,
                 msg: CosmosMsg::Stargate {
                     type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
                     value: MsgLiquidStake {
@@ -250,7 +266,7 @@ mod tests {
                     .into(),
                 },
                 gas_limit: None,
-                reply_on: ReplyOn::Never
+                reply_on: ReplyOn::Success
             }
         );
 
@@ -259,20 +275,6 @@ mod tests {
                 .unwrap()
                 .checked_mul(Decimal::from_str(exchange_rate).unwrap())
                 .unwrap(),
-        );
-
-        assert_eq!(
-            res.messages[1],
-            SubMsg {
-                id: 0,
-                msg: CosmosMsg::Bank(BankMsg::Send {
-                    to_address: "receiver".to_string(),
-                    amount: coins(expected_staked_amount.into(), LIQUIDSTAKE_DENOM),
-                })
-                .into(),
-                gas_limit: None,
-                reply_on: ReplyOn::Never,
-            }
         );
 
         // ensure attributes are set
@@ -342,5 +344,42 @@ mod tests {
             }
             _ => panic!("DO NOT ENTER HERE"),
         }
+    }
+
+    #[test]
+    fn handle_ls_reply_should_work() {
+        let (mut deps, _env, _info) = default_instantiate();
+
+        let msg = Reply {
+            id: 1,
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
+                events: vec![],
+                data: Some(Binary::from_base64("Cv0BeyJjb250cmFjdCI6Indvcm1ob2xlMXl3NHd2MnpxZzl4a242N3p2cTNhenllMHQ4aDB4OWtneWczZDUzanltMjRneHQ0OXZkeXM2czhoN2EiLCJkZW5vbSI6bnVsbCwicmVjaXBpZW50Ijoic2VpMWRrZHdkdmtueDBxYXY1Y3A1a3c2OG1rbjNyOTltM3N2a3lqZnZrenR3aDk3ZHYybG0wa3NqNnhyYWsiLCJhbW91bnQiOiIxMDAwIiwicmVsYXllciI6InNlaTF2aGttMnF2Nzg0cnVseDh5bHJ1MHpwdnl2dzNtM2N5OXgzeHlmdiIsImZlZSI6IjAifQ==").unwrap())
+            })
+        };
+
+        let current_tx = LSInfo {
+            receiver: Addr::unchecked("receiver"),
+            prev_ls_token_balance: Uint128::new(1000u128),
+        };
+        CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
+
+        let res = handle_ls_reply(deps.as_mut(), mock_env(), msg).unwrap();
+
+        assert_eq!(
+            res.messages[0],
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Bank(BankMsg::Send {
+                    to_address: "receiver".to_string(),
+                    amount: vec![Coin {
+                        denom: LIQUIDSTAKE_DENOM.to_string(),
+                        amount: Uint128::new(1000u128),
+                    }],
+                }),
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            }
+        );
     }
 }

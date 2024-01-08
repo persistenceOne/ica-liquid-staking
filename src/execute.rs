@@ -1,19 +1,18 @@
 use std::str::FromStr;
 
 use cosmwasm_std::{
-    Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, QueryRequest, Response,
-    Uint128, SubMsg, Reply, from_json, Binary,
+    Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg, Uint128,
 };
-use cw_utils::{must_pay, parse_reply_execute_data, parse_execute_response_data};
+use cw_utils::must_pay;
 use persistence_std::types::{
     cosmos::base::v1beta1::Coin as StdCoin,
     pstake::liquidstakeibc::v1beta1::{
-        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse, MsgLiquidStakeResponse,
+        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse,
     },
 };
 
 use crate::{
-    state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
+    state::{LSInfo, ASSETS, CURRENT_TX, LS_CONFIG, STAKED_LIQUIDITY_INFO},
     ContractError,
 };
 
@@ -37,6 +36,18 @@ pub fn try_liquid_staking(
 
     let asset = ASSETS.load(deps.storage)?;
     let denom = asset.native_asset_denom;
+
+    // get contract balance of ls asset
+    let contract_lst_balance = deps
+        .querier
+        .query_balance(env.contract.address.clone(), asset.ls_asset_denom)?;
+
+    // save interim state
+    let current_tx = LSInfo {
+        receiver: receiver.clone(),
+        prev_ls_token_balance: contract_lst_balance.amount,
+    };
+    CURRENT_TX.save(deps.storage, &current_tx)?;
 
     // check if the denom and amount is valid
     let native_amount: Uint128 = match must_pay(&info, &denom) {
@@ -80,10 +91,6 @@ pub fn try_liquid_staking(
     STAKED_LIQUIDITY_INFO.save(deps.storage, &staked_liquidity_info)?;
 
     let res = Response::new()
-        // .add_message(CosmosMsg::Stargate {
-        //     type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
-        //     value: msg_liquid_stake.into(),
-        // })
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Stargate {
                 type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
@@ -91,13 +98,6 @@ pub fn try_liquid_staking(
             },
             LS_REPLY_ID,
         ))
-        .add_message(CosmosMsg::Bank(BankMsg::Send {
-            to_address: receiver.clone().to_string(),
-            amount: vec![Coin {
-                denom: asset.ls_asset_denom,
-                amount: lst_mint_amount,
-            }],
-        }))
         .add_attribute("action", "liquid_stake")
         .add_attribute("native_amount", native_amount.to_string())
         .add_attribute("lst_mint_amount", lst_mint_amount.to_string())
@@ -105,24 +105,4 @@ pub fn try_liquid_staking(
         .add_attribute("denom", denom)
         .add_attribute("receiver", receiver.to_string());
     Ok(res)
-}
-
-pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    deps.api.debug("WASMDEBUG: clock reply");
-
-    let parsed_data = parse_reply_execute_data(msg);
-    match parsed_data {
-        Ok(response) => {
-
-            let raw_data = response.data.ok_or(ContractError::LSResponseDataMissing)?;
-
-            let msg_ls_response: MsgLiquidStakeResponse = from_json(raw_data.as_ref())?;
-
-            Ok(Response::default()
-                .add_attribute("method", "handle_clock_reply")
-                .add_attribute("response", msg_ls_response)
-            )
-        }
-        Err(err) => Err(ContractError::ParseReplyError(err.to_string())),
-    }
 }

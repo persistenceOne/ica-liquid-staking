@@ -43,4 +43,6 @@ query-all:
 
 # Executes IBC tests via interchaintest
 ictest-ibc:
-	cd tests/interchaintest && go test -timeout=25m -race -v -run TestPersistenceGaiaIBCTransfer .
+	cd tests/interchaintest && \
+  go clean -testcache && \
+  go test -timeout=25m -race -v -run TestPersistenceGaiaIBCTransfer .
