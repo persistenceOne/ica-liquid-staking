@@ -272,8 +272,8 @@ mod tests {
             res.attributes,
             vec![
                 attr("action", "liquid_stake"),
-                attr("amount", deposit_amount.to_string()),
-                attr("staked_amount", expected_staked_amount.to_string()),
+                attr("native_amount", deposit_amount.to_string()),
+                attr("lst_mint_amount", expected_staked_amount.to_string()),
                 attr("exchange_rate", exchange_rate),
                 attr("denom", NATIVE_DENOM),
                 attr("receiver", "receiver"),

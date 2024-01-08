@@ -37,7 +37,7 @@ pub fn try_liquid_staking(
     let denom = asset.native_asset_denom;
 
     // check if the denom and amount is valid
-    let amount: Uint128 = match must_pay(&info, &denom) {
+    let native_amount: Uint128 = match must_pay(&info, &denom) {
         Ok(coin_amount) => coin_amount,
         Err(e) => {
             return Err(ContractError::PaymentError(e.to_string()));
@@ -48,7 +48,7 @@ pub fn try_liquid_staking(
     let msg_liquid_stake = MsgLiquidStake {
         amount: Some(StdCoin {
             denom: denom.clone(),
-            amount: amount.to_string(),
+            amount: native_amount.to_string(),
         }),
         delegator_address: env.contract.address.to_string(),
     };
@@ -66,15 +66,15 @@ pub fn try_liquid_staking(
 
     // calculate staked amount to be sent to the receiver
     let exchange_rate_decimal = Decimal::from_str(&exchange_rate)?;
-    let amount_decimal = Decimal::from_str(&amount.to_string())?;
-    let staked_amount_decimal = amount_decimal.checked_mul(exchange_rate_decimal)?;
+    let amount_decimal = Decimal::from_str(&native_amount.to_string())?;
+    let lst_mint_amount_decimal = amount_decimal.checked_mul(exchange_rate_decimal)?;
 
     // convert decimal to Uint128 to be sent to the receiver and
-    let staked_amount = Decimal::to_uint_floor(staked_amount_decimal);
+    let lst_mint_amount = Decimal::to_uint_floor(lst_mint_amount_decimal);
 
     // update the staked amount
     let mut staked_liquidity_info = STAKED_LIQUIDITY_INFO.load(deps.storage)?;
-    staked_liquidity_info.staked_amount_native += amount;
+    staked_liquidity_info.staked_amount_native += native_amount;
     STAKED_LIQUIDITY_INFO.save(deps.storage, &staked_liquidity_info)?;
 
     let res = Response::new()
@@ -86,12 +86,12 @@ pub fn try_liquid_staking(
             to_address: receiver.clone().to_string(),
             amount: vec![Coin {
                 denom: asset.ls_asset_denom,
-                amount: staked_amount,
+                amount: lst_mint_amount,
             }],
         }))
         .add_attribute("action", "liquid_stake")
-        .add_attribute("amount", amount.to_string())
-        .add_attribute("staked_amount", staked_amount.to_string())
+        .add_attribute("native_amount", native_amount.to_string())
+        .add_attribute("lst_mint_amount", lst_mint_amount.to_string())
         .add_attribute("exchange_rate", exchange_rate)
         .add_attribute("denom", denom)
         .add_attribute("receiver", receiver.to_string());

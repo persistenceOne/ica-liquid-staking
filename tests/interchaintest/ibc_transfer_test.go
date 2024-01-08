@@ -334,16 +334,3 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		require.Equal(t, transferAmount, persistenceUpdateBal)
 	})
 }
-
-
-// 2024-01-04 22:59:45 6:59PM INF minted coins from module account amount=1000ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2 from=transfer module=x/bank
-// 2024-01-04 22:59:45 6:59PM INF Received incoming IBC transfer. channel=channel-0 module=x/liquidstakeibc port=transfer sequence=1
-// 2024-01-04 22:59:45 6:59PM ERR error-context: Generic error: Querier system error: Unsupported query type: '/pstake.liquidstakeibc.v1beta1.Query/ExchangeRate' path is not allowed from the contract: execute wasm contract failed module=ibc-acknowledgement-error
-// 2024-01-04 22:59:45 6:59PM INF acknowledgement written dst_channel=channel-0 dst_port=
-
-
-// 2024-01-04 23:51:34 7:51PM INF minted coins from module account amount=1000ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2 from=transfer module=x/bank
-// 2024-01-04 23:51:34 7:51PM INF Received incoming IBC transfer. channel=channel-0 module=x/liquidstakeibc port=transfer sequence=1
-// 2024-01-04 23:51:34 7:51PM ERR error-context: Generic error: Querier system error: Unsupported query type: No route to query '/pstake.liquidstakeibc.v1beta1/ExchangeRate': execute wasm contract failed module=ibc-acknowledgement-error
-// 2024-01-04 23:51:34 7:51PM INF acknowledgement written dst_channel=channel-0 dst_port=transfer module=x/ibc/channel sequence=1 src_channel=channel-0 src_port=transfer
-// 2024-01-04 23:51:34 7:51PM INF receive packet
