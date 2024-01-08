@@ -2,13 +2,13 @@ use std::str::FromStr;
 
 use cosmwasm_std::{
     Addr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, QueryRequest, Response,
-    Uint128,
+    Uint128, SubMsg, Reply, from_json, Binary,
 };
-use cw_utils::must_pay;
+use cw_utils::{must_pay, parse_reply_execute_data, parse_execute_response_data};
 use persistence_std::types::{
     cosmos::base::v1beta1::Coin as StdCoin,
     pstake::liquidstakeibc::v1beta1::{
-        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse,
+        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse, MsgLiquidStakeResponse,
     },
 };
 
@@ -19,6 +19,8 @@ use crate::{
 
 pub const LIQUIDSTAKEIBC_RATE_QUERY_TYPE: &str =
     "/pstake.liquidstakeibc.v1beta1.Query/ExchangeRate";
+
+pub(crate) const LS_REPLY_ID: u64 = 1u64;
 
 pub fn try_liquid_staking(
     deps: DepsMut,
@@ -78,10 +80,17 @@ pub fn try_liquid_staking(
     STAKED_LIQUIDITY_INFO.save(deps.storage, &staked_liquidity_info)?;
 
     let res = Response::new()
-        .add_message(CosmosMsg::Stargate {
-            type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
-            value: msg_liquid_stake.into(),
-        })
+        // .add_message(CosmosMsg::Stargate {
+        //     type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
+        //     value: msg_liquid_stake.into(),
+        // })
+        .add_submessage(SubMsg::reply_on_success(
+            CosmosMsg::Stargate {
+                type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidStake".to_string(),
+                value: msg_liquid_stake.into(),
+            },
+            LS_REPLY_ID,
+        ))
         .add_message(CosmosMsg::Bank(BankMsg::Send {
             to_address: receiver.clone().to_string(),
             amount: vec![Coin {
@@ -96,4 +105,24 @@ pub fn try_liquid_staking(
         .add_attribute("denom", denom)
         .add_attribute("receiver", receiver.to_string());
     Ok(res)
+}
+
+pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    deps.api.debug("WASMDEBUG: clock reply");
+
+    let parsed_data = parse_reply_execute_data(msg);
+    match parsed_data {
+        Ok(response) => {
+
+            let raw_data = response.data.ok_or(ContractError::LSResponseDataMissing)?;
+
+            let msg_ls_response: MsgLiquidStakeResponse = from_json(raw_data.as_ref())?;
+
+            Ok(Response::default()
+                .add_attribute("method", "handle_clock_reply")
+                .add_attribute("response", msg_ls_response)
+            )
+        }
+        Err(err) => Err(ContractError::ParseReplyError(err.to_string())),
+    }
 }

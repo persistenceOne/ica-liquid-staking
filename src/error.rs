@@ -21,6 +21,15 @@ pub enum ContractError {
 
     #[error("Payment error: {0}")]
     PaymentError(String),
+
+    #[error("Unknown reply id")]
+    UnknownReplyId {},
+
+    #[error("Parse reply error: {0}")]
+    ParseReplyError(String),
+
+    #[error("LS failed to return data in its response")]
+    LSResponseDataMissing,
 }
 
 impl From<OverflowError> for ContractError {

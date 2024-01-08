@@ -1,13 +1,13 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Reply,
 };
 use cw2::set_contract_version;
 
 use crate::{
     error::ContractError,
-    execute,
+    execute::{handle_ls_reply, try_liquid_staking, LS_REPLY_ID},
     msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg, StakedLiquidityInfo},
     query,
     state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
@@ -60,8 +60,16 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::LiquidStake { receiver } => {
-            execute::try_liquid_staking(deps, env, info, receiver)
+            try_liquid_staking(deps, env, info, receiver)
         }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    match msg.id {
+        LS_REPLY_ID => handle_ls_reply(deps, env, msg),
+        _ => Err(ContractError::UnknownReplyId {}),
     }
 }
 
