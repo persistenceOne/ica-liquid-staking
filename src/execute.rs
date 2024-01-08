@@ -8,12 +8,12 @@ use cw_utils::must_pay;
 use persistence_std::types::{
     cosmos::base::v1beta1::Coin as StdCoin,
     pstake::liquidstakeibc::v1beta1::{
-        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse,
+        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse, MsgLiquidUnstake,
     },
 };
 
 use crate::{
-    state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
+    state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO, UNSTAKED_LIQUIDITY_INFO},
     ContractError,
 };
 
@@ -90,8 +90,86 @@ pub fn try_liquid_staking(
             }],
         }))
         .add_attribute("action", "liquid_stake")
-        .add_attribute("amount", amount.to_string())
+        .add_attribute("native_amount", amount.to_string())
         .add_attribute("staked_amount", staked_amount.to_string())
+        .add_attribute("exchange_rate", exchange_rate)
+        .add_attribute("denom", denom)
+        .add_attribute("receiver", receiver.to_string());
+    Ok(res)
+}
+
+pub fn try_claim(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    receiver: Addr,
+) -> Result<Response, ContractError> {
+    deps.api.debug("WASMDEBUG: claim execute");
+    let config = LS_CONFIG.load(deps.storage)?;
+
+    if !config.active {
+        return Err(ContractError::NotActive {});
+    }
+
+    let asset = ASSETS.load(deps.storage)?;
+    let denom = asset.ls_asset_denom;
+
+    // check if the denom and amount is valid
+    let staked_amount: Uint128 = match must_pay(&info, &denom) {
+        Ok(coin_amount) => coin_amount,
+        Err(e) => {
+            return Err(ContractError::PaymentError(e.to_string()));
+        }
+    };
+
+    // create the message
+    let msg_liquid_unstake = MsgLiquidUnstake {
+        amount: Some(StdCoin {
+            denom: denom.clone(),
+            amount: staked_amount.to_string(),
+        }),
+        delegator_address: env.contract.address.to_string(),
+    };
+
+    // query exchange rate
+    let q = QueryExchangeRateRequest {
+        chain_id: config.chain_id,
+    };
+    let exchange_rate_response: QueryExchangeRateResponse =
+        deps.querier.query(&QueryRequest::Stargate {
+            path: LIQUIDSTAKEIBC_RATE_QUERY_TYPE.to_string(),
+            data: q.into(),
+        })?;
+    let exchange_rate = exchange_rate_response.rate;
+
+    // calculate staked amount to be sent to the receiver
+    let exchange_rate_decimal = Decimal::from_str(&exchange_rate)?;
+    let staked_amount_decimal = Decimal::from_str(&staked_amount.to_string())?;
+    let native_amount_decimal = staked_amount_decimal.checked_div(exchange_rate_decimal)?;
+
+    // convert decimal to Uint128 to be sent to the receiver and
+    let native_amount = Decimal::to_uint_floor(native_amount_decimal);
+
+    // update the staked amount
+    let mut unstaked_liquidity_info = UNSTAKED_LIQUIDITY_INFO.load(deps.storage)?;
+    unstaked_liquidity_info.unstaked_amount += staked_amount;
+    UNSTAKED_LIQUIDITY_INFO.save(deps.storage, &unstaked_liquidity_info)?;
+
+    let res = Response::new()
+        .add_message(CosmosMsg::Stargate {
+            type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidUnstake".to_string(),
+            value: msg_liquid_unstake.into(),
+        })
+        .add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: receiver.clone().to_string(),
+            amount: vec![Coin {
+                denom: denom.clone(),
+                amount: native_amount,
+            }],
+        }))
+        .add_attribute("action", "claim")
+        .add_attribute("staked_amount", staked_amount.to_string())
+        .add_attribute("native_amount", native_amount.to_string())
         .add_attribute("exchange_rate", exchange_rate)
         .add_attribute("denom", denom)
         .add_attribute("receiver", receiver.to_string());

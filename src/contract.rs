@@ -8,9 +8,9 @@ use cw2::set_contract_version;
 use crate::{
     error::ContractError,
     execute,
-    msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg, StakedLiquidityInfo},
+    msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg, StakedLiquidityInfo, UnstakedLiquidityInfo},
     query,
-    state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO},
+    state::{ASSETS, LS_CONFIG, STAKED_LIQUIDITY_INFO, UNSTAKED_LIQUIDITY_INFO},
 };
 
 // version info for migration info
@@ -43,6 +43,13 @@ pub fn instantiate(
         },
     )?;
 
+    UNSTAKED_LIQUIDITY_INFO.save(
+        deps.storage,
+        &UnstakedLiquidityInfo {
+            unstaked_amount: Uint128::zero(),
+        },
+    )?;
+
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("owner", info.sender.to_string())
@@ -61,7 +68,11 @@ pub fn execute(
     match msg {
         ExecuteMsg::LiquidStake { receiver } => {
             execute::try_liquid_staking(deps, env, info, receiver)
-        }
+        },
+
+        ExecuteMsg::Claim { receiver } => {
+            execute::try_claim(deps, env, info, receiver)
+        },
     }
 }
 
@@ -70,6 +81,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetStakedLiquidity {} => {
             to_json_binary(&query::query_staked_liquidity_info(deps)?)
+        }
+        QueryMsg::GetUnstakedLiquidity {} => {
+            to_json_binary(&query::query_unstaked_liquidity_info(deps)?)
         }
         QueryMsg::Assets {} => to_json_binary(&query::query_assets(deps)?),
         QueryMsg::LsConfig {} => to_json_binary(&query::query_ls_config(deps)?),
@@ -82,7 +96,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::execute::LIQUIDSTAKEIBC_RATE_QUERY_TYPE;
-    use crate::msg::AssetData;
+    use crate::msg::{AssetData, UnstakedLiquidityInfo};
 
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage};
@@ -92,12 +106,12 @@ mod tests {
     };
     use persistence_std::types::cosmos::base::v1beta1::Coin as StdCoin;
     use persistence_std::types::pstake::liquidstakeibc::v1beta1::{
-        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse,
+        MsgLiquidStake, QueryExchangeRateRequest, QueryExchangeRateResponse, MsgLiquidUnstake,
     };
 
     const MOCK_CHAIN_ID: &str = "chain-1";
     const NATIVE_DENOM: &str = "token";
-    const LIQUIDSTAKE_DENOM: &str = "stk/token";
+    const LS_DENOM: &str = "stk/token";
 
     pub struct WasmMockQuerier {
         pub exchange_rate: HashMap<String, QueryExchangeRateResponse>,
@@ -173,7 +187,7 @@ mod tests {
         let msg = InstantiateMsg {
             assets: AssetData {
                 native_asset_denom: NATIVE_DENOM.to_string(),
-                ls_asset_denom: LIQUIDSTAKE_DENOM.to_string(),
+                ls_asset_denom: LS_DENOM.to_string(),
             },
             chain_id: MOCK_CHAIN_ID.to_string(),
         };
@@ -185,7 +199,7 @@ mod tests {
                 attr("method", "instantiate"),
                 attr("owner", "creator"),
                 attr("active", "true"),
-                attr("ls_asset_denom", LIQUIDSTAKE_DENOM),
+                attr("ls_asset_denom", LS_DENOM),
                 attr("native_asset_denom", NATIVE_DENOM),
             ]
         );
@@ -205,7 +219,7 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::Assets {}).unwrap();
         let value: AssetData = from_json(&res).unwrap();
         assert_eq!(NATIVE_DENOM, value.native_asset_denom);
-        assert_eq!(LIQUIDSTAKE_DENOM, value.ls_asset_denom);
+        assert_eq!(LS_DENOM, value.ls_asset_denom);
     }
 
     #[test]
@@ -259,7 +273,7 @@ mod tests {
                 id: 0,
                 msg: CosmosMsg::Bank(BankMsg::Send {
                     to_address: "receiver".to_string(),
-                    amount: coins(expected_staked_amount.into(), LIQUIDSTAKE_DENOM),
+                    amount: coins(expected_staked_amount.into(), LS_DENOM),
                 })
                 .into(),
                 gas_limit: None,
@@ -272,7 +286,7 @@ mod tests {
             res.attributes,
             vec![
                 attr("action", "liquid_stake"),
-                attr("amount", deposit_amount.to_string()),
+                attr("native_amount", deposit_amount.to_string()),
                 attr("staked_amount", expected_staked_amount.to_string()),
                 attr("exchange_rate", exchange_rate),
                 attr("denom", NATIVE_DENOM),
@@ -334,5 +348,83 @@ mod tests {
             }
             _ => panic!("DO NOT ENTER HERE"),
         }
+    }
+
+    #[test]
+    fn claim() {
+        let (mut deps, _env, _info) = default_instantiate();
+
+        let deposit_amount = Uint128::from(2000u128);
+        let exchange_rate = "0.825537496882794638";
+
+        // Mock each pool in the querier
+        deps.querier
+            .mock_exchange_rate(MOCK_CHAIN_ID.to_string(), exchange_rate.to_string());
+
+        // beneficiary can release it
+        let info = mock_info("anyone", &coins(deposit_amount.into(), "stk/token"));
+        let msg = ExecuteMsg::Claim {
+            receiver: Addr::unchecked("receiver"),
+        };
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(2, res.messages.len());
+        assert_eq!(
+            res.messages[0],
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Stargate {
+                    type_url: "/pstake.liquidstakeibc.v1beta1.MsgLiquidUnstake".to_string(),
+                    value: MsgLiquidUnstake {
+                        amount: Some(StdCoin {
+                            denom: LS_DENOM.to_string(),
+                            amount: deposit_amount.to_string(),
+                        }),
+                        delegator_address: "cosmos2contract".to_string(),
+                    }
+                    .into(),
+                },
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            }
+        );
+
+        let expected_native_amount = Decimal::to_uint_floor(
+            Decimal::from_str(&deposit_amount.to_string())
+                .unwrap()
+                .checked_div(Decimal::from_str(exchange_rate).unwrap())
+                .unwrap(),
+        );
+
+        assert_eq!(
+            res.messages[1],
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Bank(BankMsg::Send {
+                    to_address: "receiver".to_string(),
+                    amount: coins(expected_native_amount.into(), LS_DENOM),
+                })
+                .into(),
+                gas_limit: None,
+                reply_on: ReplyOn::Never,
+            }
+        );
+
+        // ensure attributes are set
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("action", "claim"),
+                attr("staked_amount", deposit_amount.to_string()),
+                attr("native_amount", expected_native_amount.to_string()),
+                attr("exchange_rate", exchange_rate),
+                attr("denom", LS_DENOM),
+                attr("receiver", "receiver"),
+            ]
+        );
+
+        // ensure we can query the staked amount
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetUnstakedLiquidity {}).unwrap();
+        let value: UnstakedLiquidityInfo = from_json(&res).unwrap();
+        assert_eq!(deposit_amount, value.unstaked_amount);
     }
 }

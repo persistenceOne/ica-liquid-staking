@@ -26,6 +26,8 @@ pub struct AssetData {
 #[cw_serde]
 pub enum ExecuteMsg {
     LiquidStake { receiver: Addr },
+
+    Claim { receiver: Addr },
 }
 
 #[cw_serde]
@@ -33,6 +35,8 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(StakedLiquidityInfo)]
     GetStakedLiquidity {},
+    #[returns(UnstakedLiquidityInfo)]
+    GetUnstakedLiquidity {},
     #[returns(AssetData)]
     Assets {},
     #[returns(LsConfig)]
@@ -43,4 +47,10 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct StakedLiquidityInfo {
     pub staked_amount_native: Uint128,
+}
+
+/// keeps track of provided asset liquidity in `Uint128`.
+#[cw_serde]
+pub struct UnstakedLiquidityInfo {
+    pub unstaked_amount: Uint128,
 }
