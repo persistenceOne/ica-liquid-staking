@@ -30,14 +30,6 @@ type QueryLsConfigMsg struct {
 	LsConfig struct{} `json:"ls_config"`
 }
 
-type QueryStakedLiquidityMsg struct {
-	GetStakedLiquidity struct{} `json:"get_staked_liquidity"`
-}
-
-type QueryAssetsMsg struct {
-	Assets struct{} `json:"assets"`
-}
-
 type Active struct {
 	Active bool `json:"active"`
 }
@@ -46,25 +38,9 @@ type QueryLsConfigResp struct {
 	Data Active `json:"data"`
 }
 
-type StakedLAmountNative struct {
-	StakedLAmountNative string `json:"staked_amount_native"`
-}
-
-type QueryStakedLiquidityResp struct {
-	Data StakedLAmountNative `json:"data"`
-}
-
-type QueryAssetsResp struct {
-	Data AssetInfos `json:"data"`
-}
-
 var (
 	queryLsConfigMsg             QueryLsConfigMsg
 	queryLsConfigResp            QueryLsConfigResp
-	queryStakedLiquidityMsg      QueryStakedLiquidityMsg
-	queryStakedLiquidityResp     QueryStakedLiquidityResp
-	queryAssetsMsg               QueryAssetsMsg
-	queryAssetsResp              QueryAssetsResp
 	icaLiquidStakingContractAddr string
 )
 
@@ -252,7 +228,7 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		require.NoError(t, err)
 
 		// Instantiate ica_liquid_staking.wasm contract
-		initMsg := fmt.Sprintf(`{"assets": {"native_asset_denom": "%s", "ls_asset_denom": "%s"}, "chain_id": "%s"}`, gaiaIBCDenom, stkDenom, gaiaChain.Config().ChainID)
+		initMsg := `{"ls_prefix": "stk/"}`
 		icaLiquidStakingContractAddr, err = persistenceChain.InstantiateContract(
 			ctx, persistenceUser.KeyName(), icaLiquidStakingCodeId, initMsg, true)
 		require.NoError(t, err)
@@ -265,17 +241,6 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		err = persistenceChain.QueryContract(ctx, icaLiquidStakingContractAddr, queryLsConfigMsg, &queryLsConfigResp)
 		require.NoError(t, err)
 		require.Equal(t, true, queryLsConfigResp.Data.Active)
-
-		// Query ica_liquid_staking.wasm contract
-		err = persistenceChain.QueryContract(ctx, icaLiquidStakingContractAddr, queryStakedLiquidityMsg, &queryStakedLiquidityResp)
-		require.NoError(t, err)
-		require.Equal(t, "0", queryStakedLiquidityResp.Data.StakedLAmountNative)
-
-		// Query ica_liquid_staking.wasm contract
-		err = persistenceChain.QueryContract(ctx, icaLiquidStakingContractAddr, queryAssetsMsg, &queryAssetsResp)
-		require.NoError(t, err)
-		require.Equal(t, gaiaIBCDenom, queryAssetsResp.Data.NativeAssetDenom)
-		require.Equal(t, stkDenom, queryAssetsResp.Data.LsAssetDenom)
 	})
 
 	t.Run("ibc transfer atom with memo", func(t *testing.T) {

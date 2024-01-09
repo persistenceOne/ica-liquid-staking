@@ -27,8 +27,8 @@ var (
 	IBCRelayerVersion  = "main"
 
 	PersistenceCoreImage = ibc.DockerImage{
-		Repository: "persistenceone/persistencecore",
-		Version:    "v11.1.1-stargate-fix",
+		Repository: "persistence",
+		Version:    "local",
 		UidGid:     "1025:1025",
 	}
 

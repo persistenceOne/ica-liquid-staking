@@ -8,14 +8,18 @@ build:
 fmt:
 	cargo fmt
 
+.PHONY: test
+test:
+	cargo test
+
 build-debug:
 	cargo wasm-debug
 
-build-optimized: fmt build
+build-optimized: fmt build test
 	docker run --rm -v "$(CURDIR)":/code \
 		--mount type=volume,source="$(notdir $(CURDIR))_cache",target=/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-		cosmwasm/rust-optimizer:0.14.0
+		cosmwasm/optimizer:0.15.0
 
 # Uploads the contract to osmosis
 store-contract:

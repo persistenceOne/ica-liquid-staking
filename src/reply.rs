@@ -1,9 +1,6 @@
 use cosmwasm_std::{ensure, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response};
 
-use crate::{
-    state::{ASSETS, CURRENT_TX},
-    ContractError,
-};
+use crate::{state::CURRENT_TX, ContractError};
 
 pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls reply");
@@ -20,10 +17,10 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
     CURRENT_TX.remove(deps.storage);
 
     // get contract balance of ls asset
-    let asset = ASSETS.load(deps.storage)?;
-    let current_ls_token_balance = deps
-        .querier
-        .query_balance(env.contract.address.clone(), asset.ls_asset_denom.clone())?;
+    let current_ls_token_balance = deps.querier.query_balance(
+        env.contract.address.clone(),
+        current_tx.ls_token_denom.clone(),
+    )?;
 
     let balance_diff = current_ls_token_balance.amount - current_tx.prev_ls_token_balance;
 
@@ -32,7 +29,7 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
         .add_message(CosmosMsg::Bank(BankMsg::Send {
             to_address: current_tx.receiver.clone().to_string(),
             amount: vec![Coin {
-                denom: asset.ls_asset_denom,
+                denom: current_tx.ls_token_denom,
                 amount: balance_diff,
             }],
         }))
