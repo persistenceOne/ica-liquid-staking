@@ -14,3 +14,13 @@
 # IDEs
 *.iml
 .idea
+.cache
+
+# Build artifacts
+# *.wasm
+hash.txt
+contracts.txt
+# artifacts/
+
+# tests
+**/metadata

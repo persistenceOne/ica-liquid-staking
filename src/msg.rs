@@ -1,26 +1,46 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::{Addr, Uint128};
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub count: i32,
+    pub assets: AssetData,
+    pub chain_id: String,
+}
+
+#[cw_serde]
+pub struct LsConfig {
+    /// Flag to enable/disable the contract
+    pub active: bool,
+    /// The chain id of the chain where the native asset is located
+    /// e.g. "cosmoshub-4"
+    pub chain_id: String,
+}
+
+/// holds the native and ls asset denoms relevant for providing liquidity.
+#[cw_serde]
+pub struct AssetData {
+    pub native_asset_denom: String,
+    pub ls_asset_denom: String,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    Increment {},
-    Reset { count: i32 },
+    LiquidStake { receiver: Addr },
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    // GetCount returns the current count as a json-encoded number
-    #[returns(GetCountResponse)]
-    GetCount {},
+    #[returns(StakedLiquidityInfo)]
+    GetStakedLiquidity {},
+    #[returns(AssetData)]
+    Assets {},
+    #[returns(LsConfig)]
+    LsConfig {},
 }
 
-// We define a custom struct for each query response
+/// keeps track of provided asset liquidity in `Uint128`.
 #[cw_serde]
-pub struct GetCountResponse {
-    pub count: i32,
+pub struct StakedLiquidityInfo {
+    pub staked_amount_native: Uint128,
 }
