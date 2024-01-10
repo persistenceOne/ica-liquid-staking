@@ -272,7 +272,7 @@ mod tests {
             id: 1,
             result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![],
-                data: Some(Binary::from_base64("Cv0BeyJjb250cmFjdCI6Indvcm1ob2xlMXl3NHd2MnpxZzl4a242N3p2cTNhenllMHQ4aDB4OWtneWczZDUzanltMjRneHQ0OXZkeXM2czhoN2EiLCJkZW5vbSI6bnVsbCwicmVjaXBpZW50Ijoic2VpMWRrZHdkdmtueDBxYXY1Y3A1a3c2OG1rbjNyOTltM3N2a3lqZnZrenR3aDk3ZHYybG0wa3NqNnhyYWsiLCJhbW91bnQiOiIxMDAwIiwicmVsYXllciI6InNlaTF2aGttMnF2Nzg0cnVseDh5bHJ1MHpwdnl2dzNtM2N5OXgzeHlmdiIsImZlZSI6IjAifQ==").unwrap())
+                data: Some(Binary::from_base64("AXsiY29udHJhY3QiOiJjb3Ntb3MyY29udHJhY3QiLCJkZW5vbSI6bnVsbCwicmVjaXBpZW50IjoicmVjZWl2ZXIiLCJhbW91bnQiOiIxMDAwIiwicmVsYXllciI6InJlbGF5ZXIiLCJmZWUiOiIwIn0=").unwrap())
             })
         };
 
