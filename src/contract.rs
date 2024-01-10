@@ -272,8 +272,8 @@ mod tests {
             id: 1,
             result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
                 events: vec![],
-                data: Some(Binary::from_base64("AXsiY29udHJhY3QiOiJjb3Ntb3MyY29udHJhY3QiLCJkZW5vbSI6bnVsbCwicmVjaXBpZW50IjoicmVjZWl2ZXIiLCJhbW91bnQiOiIxMDAwIiwicmVsYXllciI6InJlbGF5ZXIiLCJmZWUiOiIwIn0=").unwrap())
-            })
+                data: Some(to_json_binary("response").unwrap()),
+            }),
         };
 
         let current_tx = LSInfo {
