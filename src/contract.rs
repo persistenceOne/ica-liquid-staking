@@ -7,7 +7,7 @@ use cw2::set_contract_version;
 
 use crate::{
     error::ContractError,
-    execute::{try_liquid_staking, LS_REPLY_ID},
+    execute::{try_liquid_staking, update_config, LS_REPLY_ID},
     msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg},
     query,
     reply::handle_ls_reply,
@@ -49,7 +49,14 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::LiquidStake { receiver } => try_liquid_staking(deps, env, info, receiver),
+        ExecuteMsg::LiquidStake {
+            receiver,
+            transfer_channel,
+        } => try_liquid_staking(deps, env, info, receiver, transfer_channel),
+
+        ExecuteMsg::UpdateConfig { active, ls_prefix } => {
+            update_config(deps, env, info, active, ls_prefix)
+        }
     }
 }
 
@@ -82,11 +89,13 @@ mod tests {
         CosmosMsg, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, ReplyOn, SubMsg,
         SubMsgResponse, SystemError, SystemResult, Uint128,
     };
-    use osmosis_std::types::ibc::applications::transfer::v1::{
-        DenomTrace, QueryDenomTraceRequest, QueryDenomTraceResponse,
+    use persistence_std::types::{
+        cosmos::base::v1beta1::Coin as StdCoin,
+        ibc::applications::transfer::v1::{
+            DenomTrace, QueryDenomTraceRequest, QueryDenomTraceResponse,
+        },
+        pstake::liquidstakeibc::v1beta1::MsgLiquidStake,
     };
-    use persistence_std::types::cosmos::base::v1beta1::Coin as StdCoin;
-    use persistence_std::types::pstake::liquidstakeibc::v1beta1::MsgLiquidStake;
 
     use prost::Message;
 
@@ -227,6 +236,7 @@ mod tests {
         let info = mock_info("anyone", &coins(deposit_amount.into(), NATIVE_IBC_DENOM));
         let msg = ExecuteMsg::LiquidStake {
             receiver: Addr::unchecked("receiver"),
+            transfer_channel: None,
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(1, res.messages.len());
@@ -278,6 +288,7 @@ mod tests {
 
         let current_tx = LSInfo {
             receiver: Addr::unchecked("receiver"),
+            transfer_channel: None,
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
@@ -300,6 +311,15 @@ mod tests {
                 gas_limit: None,
                 reply_on: ReplyOn::Never
             }
+        );
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("method", "handle_ls_reply"),
+                attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
+                attr("receiver", "receiver"),
+                attr("transfer_channel", "")
+            ]
         );
     }
 }

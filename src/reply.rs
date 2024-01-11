@@ -1,4 +1,5 @@
 use cosmwasm_std::{ensure, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response};
+use persistence_std::types::ibc::applications::transfer::v1::MsgTransfer;
 
 use crate::{state::CURRENT_TX, ContractError};
 
@@ -24,14 +25,49 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
 
     let balance_diff = current_ls_token_balance.amount - current_tx.prev_ls_token_balance;
 
+    let bank_send_msg = match current_tx.transfer_channel.clone() {
+        Some(v) => {
+            // make ibc transfer
+            let msg_transfer = MsgTransfer {
+                source_port: "transfer".to_string(),
+                source_channel: v,
+                token: Some(
+                    Coin {
+                        denom: current_tx.ibc_denom,
+                        amount: balance_diff,
+                    }
+                    .into(),
+                ),
+                sender: env.contract.address.to_string(),
+                receiver: current_tx.receiver.to_string(),
+                timeout_height: None,
+                timeout_timestamp: 0,
+                memo: "".to_string(),
+            };
+            CosmosMsg::Stargate {
+                type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
+                value: msg_transfer.into(),
+            }
+        }
+        None => {
+            // send to receiver
+            CosmosMsg::Bank(BankMsg::Send {
+                to_address: current_tx.receiver.clone().to_string(),
+                amount: vec![Coin {
+                    denom: current_tx.ls_token_denom,
+                    amount: balance_diff,
+                }],
+            })
+        }
+    };
+
     Ok(Response::default()
+        .add_message(bank_send_msg)
         .add_attribute("method", "handle_ls_reply")
-        .add_message(CosmosMsg::Bank(BankMsg::Send {
-            to_address: current_tx.receiver.clone().to_string(),
-            amount: vec![Coin {
-                denom: current_tx.ls_token_denom,
-                amount: balance_diff,
-            }],
-        }))
-        .add_attribute("sent_amount", balance_diff.to_string()))
+        .add_attribute("minted_lst_amount", balance_diff.to_string())
+        .add_attribute("receiver", current_tx.receiver.to_string())
+        .add_attribute(
+            "transfer_channel",
+            current_tx.transfer_channel.unwrap_or_default(),
+        ))
 }

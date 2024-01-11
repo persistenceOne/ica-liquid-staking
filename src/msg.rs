@@ -17,7 +17,25 @@ pub struct LsConfig {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    LiquidStake { receiver: Addr },
+    /// Liquid stake tokens
+    LiquidStake {
+        /// Receiver of the liquid staked tokens
+        /// If `transfer_channel` is set, then `receiver` must be an IBC address
+        receiver: Addr,
+        /// IBC transfer channel that allow to optionally specify
+        /// an IBC transfer after the liquid staking function
+        /// is executed
+        /// If None, no IBC transfer will be executed
+        /// If set, then `receiver` must be an IBC address
+        transfer_channel: Option<String>,
+    },
+    /// Update the contract configuration
+    UpdateConfig {
+        /// Flag to enable/disable the contract
+        active: Option<bool>,
+        /// LS token prefix
+        ls_prefix: Option<String>,
+    },
 }
 
 #[cw_serde]

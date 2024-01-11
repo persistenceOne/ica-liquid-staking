@@ -1,1 +1,1 @@
-4b127b2a9dc40c666e65a7188729a4b65703ebb6f1d7a0a1dca293cc7b6d4617  ica_liquid_staking.wasm
+fbbe071f4a7d321a4b2ea8ce75b2ffb5417604c3ee5a49ce8d261d5cf9ee6e21  ica_liquid_staking.wasm

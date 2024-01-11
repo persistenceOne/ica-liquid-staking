@@ -256,7 +256,7 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 			Denom:   gaiaChain.Config().Denom,
 			Amount:  transferAmount,
 		}
-		executeMsg := fmt.Sprintf(`{"liquid_stake":{"receiver":"%s"}}`, persistenceUserAddr)
+		executeMsg := fmt.Sprintf(`{"liquid_stake":{"receiver":"%s","transfer_channel":""}}`, persistenceUserAddr)
 		memo := fmt.Sprintf(`{"wasm":{"contract":"%s","msg":%s}}`, icaLiquidStakingContractAddr, executeMsg)
 		transferTx, err := gaiaChain.SendIBCTransfer(ctx, gaiaChannelID, gaiaUser.KeyName(), transfer, ibc.TransferOptions{
 			Timeout: &ibc.IBCTimeout{

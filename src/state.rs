@@ -8,6 +8,7 @@ use crate::msg::LsConfig;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LSInfo {
     pub receiver: Addr,
+    pub transfer_channel: Option<String>,
     pub ibc_denom: String,
     pub ls_token_denom: String,
     pub prev_ls_token_balance: Uint128,

@@ -1,10 +1,8 @@
 use cosmwasm_std::{Addr, CosmosMsg, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg};
 use persistence_std::types::{
-    cosmos::base::v1beta1::Coin as StdCoin, pstake::liquidstakeibc::v1beta1::MsgLiquidStake,
-};
-
-use osmosis_std::types::ibc::applications::transfer::v1::{
-    QueryDenomTraceRequest, QueryDenomTraceResponse,
+    cosmos::base::v1beta1::Coin as StdCoin,
+    ibc::applications::transfer::v1::{QueryDenomTraceRequest, QueryDenomTraceResponse},
+    pstake::liquidstakeibc::v1beta1::MsgLiquidStake,
 };
 
 use crate::{
@@ -21,6 +19,7 @@ pub fn try_liquid_staking(
     env: Env,
     info: MessageInfo,
     receiver: Addr,
+    transfer_channel: Option<String>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls execute");
 
@@ -62,6 +61,7 @@ pub fn try_liquid_staking(
     // save interim state
     let current_tx = LSInfo {
         receiver: receiver.clone(),
+        transfer_channel: transfer_channel.clone(),
         ibc_denom: native_ibc_denom.clone(),
         ls_token_denom: ls_token_denom.clone(),
         prev_ls_token_balance: contract_ls_token_balance.amount,
@@ -92,4 +92,29 @@ pub fn try_liquid_staking(
         .add_attribute("ls_token_denom", ls_token_denom)
         .add_attribute("receiver", receiver.to_string());
     Ok(res)
+}
+
+pub fn update_config(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    active: Option<bool>,
+    ls_prefix: Option<String>,
+) -> Result<Response, ContractError> {
+    deps.api.debug("WASMDEBUG: update config");
+
+    let mut ls_config = LS_CONFIG.load(deps.storage)?;
+    if let Some(active) = active {
+        ls_config.active = active;
+    }
+    if let Some(ls_prefix) = ls_prefix {
+        ls_config.ls_prefix = ls_prefix;
+    }
+    LS_CONFIG.save(deps.storage, &ls_config)?;
+
+    Ok(Response::new()
+        .add_attribute("method", "update_config")
+        .add_attribute("owner", info.sender.to_string())
+        .add_attribute("active", ls_config.active.to_string())
+        .add_attribute("ls_prefix", ls_config.ls_prefix))
 }
