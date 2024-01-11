@@ -317,8 +317,7 @@ mod tests {
             vec![
                 attr("method", "handle_ls_reply"),
                 attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
-                attr("receiver", "receiver"),
-                attr("transfer_channel", "")
+                attr("receiver", "receiver")
             ]
         );
     }

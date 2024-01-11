@@ -25,8 +25,12 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
 
     let balance_diff = current_ls_token_balance.amount - current_tx.prev_ls_token_balance;
 
+    let mut res = Response::default().add_attribute("method", "handle_ls_reply");
+
     let bank_send_msg = match current_tx.transfer_channel.clone() {
         Some(v) => {
+            res = res.add_attribute("transfer_channel", v.clone());
+
             // make ibc transfer
             let msg_transfer = MsgTransfer {
                 source_port: "transfer".to_string(),
@@ -61,13 +65,8 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
         }
     };
 
-    Ok(Response::default()
+    Ok(res
         .add_message(bank_send_msg)
-        .add_attribute("method", "handle_ls_reply")
         .add_attribute("minted_lst_amount", balance_diff.to_string())
-        .add_attribute("receiver", current_tx.receiver.to_string())
-        .add_attribute(
-            "transfer_channel",
-            current_tx.transfer_channel.unwrap_or_default(),
-        ))
+        .add_attribute("receiver", current_tx.receiver.to_string()))
 }
