@@ -6,7 +6,7 @@ use persistence_std::types::{
 };
 
 use crate::{
-    msg::{PresetIbcFee, Timeouts},
+    msg::Timeouts,
     state::{LSInfo, CURRENT_TX, IBC_CONFIG, LS_CONFIG},
     ContractError,
 };
@@ -101,7 +101,6 @@ pub fn update_config(
     info: MessageInfo,
     active: Option<bool>,
     ls_prefix: Option<String>,
-    preset_ibc_fee: Option<PresetIbcFee>,
     timeouts: Option<Timeouts>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: update config");
@@ -130,13 +129,6 @@ pub fn update_config(
 
     // update ibc config
     let mut ibc_config = IBC_CONFIG.load(deps.storage)?;
-    if let Some(preset_ibc_fee) = preset_ibc_fee {
-        ibc_config.ibc_fee = preset_ibc_fee.clone().to_ibc_fee();
-
-        res = res
-            .add_attribute("ack_fee", preset_ibc_fee.ack_fee.to_string())
-            .add_attribute("timeout_fee", preset_ibc_fee.timeout_fee.to_string());
-    }
     if let Some(timeouts) = timeouts {
         ibc_config.ica_timeout = timeouts.ica_timeout;
         ibc_config.ibc_transfer_timeout = timeouts.ibc_transfer_timeout;

@@ -2,7 +2,6 @@ package interchaintest
 
 type ContractInstantiateMsg struct {
 	LsPrefix     string       `json:"ls_prefix"`
-	PresetIbcFee PresetIbcFee `json:"preset_ibc_fee"`
 	Timeouts     Timeouts     `json:"timeouts"`
 }
 
@@ -16,11 +15,6 @@ type Active struct {
 
 type QueryLsConfigResp struct {
 	Data Active `json:"data"`
-}
-
-type PresetIbcFee struct {
-	AckFee     string `json:"ack_fee"`
-	TimeoutFee string `json:"timeout_fee"`
 }
 
 type Timeouts struct {

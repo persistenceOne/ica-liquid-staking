@@ -41,7 +41,6 @@ pub fn instantiate(
     IBC_CONFIG.save(
         deps.storage,
         &IbcConfig {
-            ibc_fee: msg.preset_ibc_fee.to_ibc_fee(),
             ibc_transfer_timeout: timeouts.ibc_transfer_timeout,
             ica_timeout: timeouts.ica_timeout,
         },
@@ -72,9 +71,8 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             active,
             ls_prefix,
-            preset_ibc_fee,
             timeouts,
-        } => update_config(deps, env, info, active, ls_prefix, preset_ibc_fee, timeouts),
+        } => update_config(deps, env, info, active, ls_prefix, timeouts),
     }
 }
 
@@ -98,7 +96,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::execute::DENOM_TRACE_QUERY_TYPE;
-    use crate::msg::{PresetIbcFee, Timeouts};
+    use crate::msg::Timeouts;
     use crate::state::{LSInfo, CURRENT_TX};
 
     use super::*;
@@ -217,10 +215,6 @@ mod tests {
 
         let msg = InstantiateMsg {
             ls_prefix: "stk/".to_string(),
-            preset_ibc_fee: PresetIbcFee {
-                ack_fee: Uint128::new(100u128),
-                timeout_fee: Uint128::new(100u128),
-            },
             timeouts: None,
         };
 
@@ -260,10 +254,6 @@ mod tests {
         let msg = ExecuteMsg::UpdateConfig {
             active: Some(false),
             ls_prefix: Some("newprefix/".to_string()),
-            preset_ibc_fee: Some(PresetIbcFee {
-                ack_fee: Uint128::new(200u128),
-                timeout_fee: Uint128::new(200u128),
-            }),
             timeouts: Some(Timeouts {
                 ica_timeout: Uint64::new(10000u64),
                 ibc_transfer_timeout: Uint64::new(10000u64),
@@ -276,8 +266,6 @@ mod tests {
                 attr("method", "update_config"),
                 attr("active", "false"),
                 attr("ls_prefix", "newprefix/"),
-                attr("ack_fee", "200"),
-                attr("timeout_fee", "200"),
                 attr("ica_timeout", "10000"),
                 attr("ibc_transfer_timeout", "10000"),
             ]

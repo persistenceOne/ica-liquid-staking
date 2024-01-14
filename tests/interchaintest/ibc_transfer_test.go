@@ -156,8 +156,6 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 	stkTokenDenom := transfertypes.GetPrefixedDenom(channel.Counterparty.PortID, channel.Counterparty.ChannelID, stkDenom)
 	stkIBCDenom := transfertypes.ParseDenomTrace(stkTokenDenom).IBCDenom()
 
-  fmt.Printf("\n\nstkIBCDenom: %s\n", stkIBCDenom)
-
 	t.Run("register host chain", func(t *testing.T) {
 
 		cmd := []string{"persistenceCore", "tx", "liquidstakeibc", "register-host-chain",
@@ -212,10 +210,6 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		// Instantiate ica_liquid_staking.wasm contract
 		initMsg := ContractInstantiateMsg{
 			LsPrefix: "stk/",
-			PresetIbcFee: PresetIbcFee {
-				AckFee:     "1000",
-				TimeoutFee: "1000",
-			},
       Timeouts: Timeouts{
         IbcTransferTimeout: "5",
         IcaTimeout:         "10",

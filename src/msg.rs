@@ -1,9 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin, Uint128, Uint64};
+use cosmwasm_std::{Addr, Uint64};
 
-use persistence_std::types::ibc::applications::fee::v1::Fee as IbcFee;
-
-const PERSISTENCE_DENOM: &str = "uxprt";
 pub const DEFAULT_TIMEOUT: u64 = 60 * 60 * 5; // 5 hours
 
 #[cw_serde]
@@ -11,10 +8,6 @@ pub struct InstantiateMsg {
     /// LS token prefix used to identify LS tokens
     /// e.g. "stk/"
     pub ls_prefix: String,
-    /// persistence requires fees to be set to refund relayers for
-    /// submission of ack and timeout messages.
-    /// recv_fee and ack_fee paid in uxprt from this contract
-    pub preset_ibc_fee: PresetIbcFee,
     /// timeouts for IBC transfers
     /// ica_timeout is the timeout for the IBC channel
     /// ibc_transfer_timeout is the timeout for the IBC transfer
@@ -54,8 +47,6 @@ pub enum ExecuteMsg {
         active: Option<bool>,
         /// LS token prefix
         ls_prefix: Option<String>,
-        /// IBC fees
-        preset_ibc_fee: Option<PresetIbcFee>,
         /// IBC timeouts
         timeouts: Option<Timeouts>,
     },
@@ -66,31 +57,6 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(LsConfig)]
     LsConfig {},
-}
-
-#[cw_serde]
-pub struct PresetIbcFee {
-    pub ack_fee: Uint128,
-    pub timeout_fee: Uint128,
-}
-
-impl PresetIbcFee {
-    pub fn to_ibc_fee(self) -> IbcFee {
-        IbcFee {
-            // must be empty
-            recv_fee: vec![],
-            ack_fee: vec![Coin {
-                denom: PERSISTENCE_DENOM.to_string(),
-                amount: self.ack_fee,
-            }
-            .into()],
-            timeout_fee: vec![Coin {
-                denom: PERSISTENCE_DENOM.to_string(),
-                amount: self.timeout_fee,
-            }
-            .into()],
-        }
-    }
 }
 
 #[cw_serde]
@@ -112,7 +78,6 @@ impl Default for Timeouts {
 
 #[cw_serde]
 pub struct IbcConfig {
-    pub ibc_fee: IbcFee,
     pub ibc_transfer_timeout: Uint64,
     pub ica_timeout: Uint64,
 }
