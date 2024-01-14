@@ -231,7 +231,7 @@ dependencies = [
  "cw-utils",
  "derivative",
  "itertools 0.11.0",
- "prost 0.12.3",
+ "prost",
  "schemars",
  "serde",
  "sha2 0.10.8",
@@ -465,7 +465,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "persistence-std",
- "prost 0.11.9",
+ "prost",
  "schemars",
  "serde",
  "thiserror",
@@ -538,14 +538,14 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "persistence-std"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d289cb6b187f4f172d458b6249b931ed80bee39c28dc6b15b5e708d774e991"
+checksum = "2b1a2a4a5672c2c22257ed55e928dbd6b6e6577e660728e7b716c167a187dc48"
 dependencies = [
  "chrono",
  "cosmwasm-std",
  "persistence-std-derive",
- "prost 0.12.3",
+ "prost",
  "prost-types",
  "schemars",
  "serde",
@@ -555,9 +555,9 @@ dependencies = [
 
 [[package]]
 name = "persistence-std-derive"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7864960a7b84cd9147b25c5e3944952d5fb5a2f1f8926cd371c0f4a28d2f028d"
+checksum = "33fe1e91ef3802554f1928e2d9941350646806fcd732844efe35e95ef73701ea"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",
@@ -583,15 +583,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39278fbbf5fb4f646ce651690877f89d1c5811a3d4acb27700c1cb3cdb78fd3b"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "prost"
-version = "0.11.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
-dependencies = [
- "bytes",
 ]
 
 [[package]]
@@ -623,7 +614,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "193898f59edcf43c26227dcd4c8427f00d99d61e95dcde58dabd49fa291d470e"
 dependencies = [
- "prost 0.12.3",
+ "prost",
 ]
 
 [[package]]
