@@ -8,10 +8,10 @@ use cw2::set_contract_version;
 use crate::{
     error::ContractError,
     execute::{try_liquid_staking, update_config, LS_REPLY_ID},
-    msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg},
+    msg::{ExecuteMsg, IbcConfig, InstantiateMsg, LsConfig, QueryMsg},
     query,
     reply::handle_ls_reply,
-    state::LS_CONFIG,
+    state::{IBC_CONFIG, LS_CONFIG},
 };
 
 // version info for migration info
@@ -29,16 +29,31 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let ls_config = LsConfig {
+        admin: info.sender.clone(),
         active: true,
         ls_prefix: msg.ls_prefix.clone(),
     };
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
+    let timeouts = msg.timeouts.unwrap_or_default();
+
+    // ibc fees and timeouts
+    IBC_CONFIG.save(
+        deps.storage,
+        &IbcConfig {
+            ibc_fee: msg.preset_ibc_fee.to_ibc_fee(),
+            ibc_transfer_timeout: timeouts.ibc_transfer_timeout,
+            ica_timeout: timeouts.ica_timeout,
+        },
+    )?;
+
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("owner", info.sender.to_string())
         .add_attribute("active", "true")
-        .add_attribute("ls_prefix", msg.ls_prefix))
+        .add_attribute("ls_prefix", msg.ls_prefix)
+        .add_attribute("ica_timeout", timeouts.ica_timeout)
+        .add_attribute("ibc_transfer_timeout", timeouts.ibc_transfer_timeout))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -54,9 +69,12 @@ pub fn execute(
             transfer_channel,
         } => try_liquid_staking(deps, env, info, receiver, transfer_channel),
 
-        ExecuteMsg::UpdateConfig { active, ls_prefix } => {
-            update_config(deps, env, info, active, ls_prefix)
-        }
+        ExecuteMsg::UpdateConfig {
+            active,
+            ls_prefix,
+            preset_ibc_fee,
+            timeouts,
+        } => update_config(deps, env, info, active, ls_prefix, preset_ibc_fee, timeouts),
     }
 }
 
@@ -80,6 +98,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::execute::DENOM_TRACE_QUERY_TYPE;
+    use crate::msg::{PresetIbcFee, Timeouts};
     use crate::state::{LSInfo, CURRENT_TX};
 
     use super::*;
@@ -87,8 +106,9 @@ mod tests {
     use cosmwasm_std::{
         attr, coins, from_json, Addr, BalanceResponse, BankMsg, BankQuery, Coin, ContractResult,
         CosmosMsg, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, ReplyOn, SubMsg,
-        SubMsgResponse, SystemError, SystemResult, Uint128,
+        SubMsgResponse, SystemError, SystemResult, Uint128, Uint64,
     };
+    use persistence_std::types::ibc::applications::transfer::v1::MsgTransfer;
     use persistence_std::types::{
         cosmos::base::v1beta1::Coin as StdCoin,
         ibc::applications::transfer::v1::{
@@ -197,6 +217,11 @@ mod tests {
 
         let msg = InstantiateMsg {
             ls_prefix: "stk/".to_string(),
+            preset_ibc_fee: PresetIbcFee {
+                ack_fee: Uint128::new(100u128),
+                timeout_fee: Uint128::new(100u128),
+            },
+            timeouts: None,
         };
 
         let resp = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -207,6 +232,8 @@ mod tests {
                 attr("owner", "creator"),
                 attr("active", "true"),
                 attr("ls_prefix", "stk/"),
+                attr("ica_timeout", "18000"),
+                attr("ibc_transfer_timeout", "18000"),
             ]
         );
 
@@ -224,6 +251,43 @@ mod tests {
         let res = query(deps.as_ref(), mock_env(), QueryMsg::LsConfig {}).unwrap();
         let value: LsConfig = from_json(&res).unwrap();
         assert_eq!(true, value.active);
+    }
+
+    #[test]
+    fn update_config() {
+        let (mut deps, _env, info) = default_instantiate();
+
+        let msg = ExecuteMsg::UpdateConfig {
+            active: Some(false),
+            ls_prefix: Some("newprefix/".to_string()),
+            preset_ibc_fee: Some(PresetIbcFee {
+                ack_fee: Uint128::new(200u128),
+                timeout_fee: Uint128::new(200u128),
+            }),
+            timeouts: Some(Timeouts {
+                ica_timeout: Uint64::new(10000u64),
+                ibc_transfer_timeout: Uint64::new(10000u64),
+            }),
+        };
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("method", "update_config"),
+                attr("active", "false"),
+                attr("ls_prefix", "newprefix/"),
+                attr("ack_fee", "200"),
+                attr("timeout_fee", "200"),
+                attr("ica_timeout", "10000"),
+                attr("ibc_transfer_timeout", "10000"),
+            ]
+        );
+
+        // it worked, let's query the state
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::LsConfig {}).unwrap();
+        let value: LsConfig = from_json(&res).unwrap();
+        assert_eq!(false, value.active);
+        assert_eq!("newprefix/", value.ls_prefix);
     }
 
     #[test]
@@ -275,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn handle_ls_reply_should_work() {
+    fn handle_ls_reply_with_ica_transfer_out() {
         let (mut deps, _env, _info) = default_instantiate();
 
         let msg = Reply {
@@ -318,6 +382,70 @@ mod tests {
                 attr("method", "handle_ls_reply"),
                 attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
                 attr("receiver", "receiver")
+            ]
+        );
+    }
+
+    #[test]
+    fn handle_ls_reply_with_ibc_transfer_out() {
+        let (mut deps, env, _info) = default_instantiate();
+
+        let msg = Reply {
+            id: 1,
+            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
+                events: vec![],
+                data: Some(to_json_binary("response").unwrap()),
+            }),
+        };
+
+        let current_tx = LSInfo {
+            receiver: Addr::unchecked("ibcreceiver"),
+            transfer_channel: Some("channel-0".to_string()),
+            ibc_denom: NATIVE_IBC_DENOM.to_string(),
+            ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
+            prev_ls_token_balance: Uint128::new(1000u128),
+        };
+        CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
+
+        let res = handle_ls_reply(deps.as_mut(), mock_env(), msg).unwrap();
+
+        let msg_transfer_timeout = env.block.time.plus_seconds(18000).plus_seconds(18000);
+
+        assert_eq!(
+            res.messages[0],
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Stargate {
+                    type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
+                    value: MsgTransfer {
+                        source_port: "transfer".to_string(),
+                        source_channel: "channel-0".to_string(),
+                        token: Some(
+                            Coin {
+                                denom: LIQUIDSTAKE_DENOM.to_string(),
+                                amount: Uint128::new(1000u128),
+                            }
+                            .into()
+                        ),
+                        sender: "cosmos2contract".to_string(),
+                        receiver: "ibcreceiver".to_string(),
+                        timeout_height: None,
+                        timeout_timestamp: msg_transfer_timeout.nanos(),
+                        memo: "".to_string(),
+                    }
+                    .into(),
+                },
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            }
+        );
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("method", "handle_ls_reply"),
+                attr("transfer_channel", "channel-0"),
+                attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
+                attr("receiver", "ibcreceiver")
             ]
         );
     }

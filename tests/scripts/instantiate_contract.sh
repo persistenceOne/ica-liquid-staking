@@ -7,7 +7,15 @@ source ${SCRIPT_DIR}/vars.sh
 code_id=$(cat $METADATA/code_id.txt)
 init_msg=$(cat << EOF
 {
-  "ls_prefix": "stk/"
+  "ls_prefix": "stk/",
+  "preset_ibc_fee": {
+    "ack_fee": "1000",
+    "timeout_fee": "1000"
+  },
+  "timeouts": {
+    "ibc_transfer_timeout": "5",
+    "ica_timeout": "10"
+  }
 }
 EOF
 )

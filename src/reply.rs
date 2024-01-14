@@ -1,7 +1,10 @@
 use cosmwasm_std::{ensure, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response};
 use persistence_std::types::ibc::applications::transfer::v1::MsgTransfer;
 
-use crate::{state::CURRENT_TX, ContractError};
+use crate::{
+    state::{CURRENT_TX, IBC_CONFIG},
+    ContractError,
+};
 
 pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls reply");
@@ -31,13 +34,27 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
         Some(v) => {
             res = res.add_attribute("transfer_channel", v.clone());
 
+            let ibc_config = IBC_CONFIG.load(deps.storage)?;
+
+            // we define the persistence->host_chain timeout to be equal to:
+            // current block + ICA timeout + ibc transfer timeout.
+            // this assumes the worst possible time of delivery for the ICA message
+            // which wraps the underlying MsgTransfer.
+            let msg_transfer_timeout = env
+                .block
+                .time
+                // we take the wrapping ICA tx timeout into account and assume the worst
+                .plus_seconds(ibc_config.ica_timeout.u64())
+                // and then add the preset ibc transfer timeout
+                .plus_seconds(ibc_config.ibc_transfer_timeout.u64());
+
             // make ibc transfer
             let msg_transfer = MsgTransfer {
                 source_port: "transfer".to_string(),
                 source_channel: v,
                 token: Some(
                     Coin {
-                        denom: current_tx.ibc_denom,
+                        denom: current_tx.ls_token_denom,
                         amount: balance_diff,
                     }
                     .into(),
@@ -45,7 +62,7 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
                 sender: env.contract.address.to_string(),
                 receiver: current_tx.receiver.to_string(),
                 timeout_height: None,
-                timeout_timestamp: 0,
+                timeout_timestamp: msg_transfer_timeout.nanos(),
                 memo: "".to_string(),
             };
             CosmosMsg::Stargate {
