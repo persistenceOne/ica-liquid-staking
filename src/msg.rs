@@ -50,6 +50,8 @@ pub enum ExecuteMsg {
         /// IBC timeouts
         timeouts: Option<Timeouts>,
     },
+    /// Claim sent tokens
+    Claim {},
 }
 
 #[cw_serde]

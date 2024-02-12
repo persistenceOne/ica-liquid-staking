@@ -7,12 +7,15 @@ use cw2::set_contract_version;
 
 use crate::{
     error::ContractError,
-    execute::{try_liquid_staking, update_config, LS_REPLY_ID},
+    execute::{try_claim, try_liquid_staking, update_config},
     msg::{ExecuteMsg, IbcConfig, InstantiateMsg, LsConfig, QueryMsg},
     query,
-    reply::handle_ls_reply,
+    reply::{handle_ls_reply, handle_transfer_reply},
     state::{IBC_CONFIG, LS_CONFIG},
 };
+
+pub const LS_REPLY_ID: u64 = 1;
+pub const TRANSFER_REPLY_ID: u64 = 2;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:ica-liquid-staking";
@@ -73,6 +76,8 @@ pub fn execute(
             ls_prefix,
             timeouts,
         } => update_config(deps, env, info, active, ls_prefix, timeouts),
+
+        ExecuteMsg::Claim {} => try_claim(deps, env, info),
     }
 }
 
@@ -80,7 +85,8 @@ pub fn execute(
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     match msg.id {
         LS_REPLY_ID => handle_ls_reply(deps, env, msg),
-        _ => Err(ContractError::UnknownReplyId {}),
+        TRANSFER_REPLY_ID => handle_transfer_reply(deps, env, msg),
+        _ => Err(ContractError::UnknownReplyId { id: msg.id }),
     }
 }
 
@@ -339,11 +345,13 @@ mod tests {
         };
 
         let current_tx = LSInfo {
+            sender: Addr::unchecked("sender"),
             receiver: Addr::unchecked("receiver"),
             transfer_channel: None,
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
+            balance_change: Uint128::new(1000u128),
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -352,7 +360,7 @@ mod tests {
         assert_eq!(
             res.messages[0],
             SubMsg {
-                id: 0,
+                id: 2,
                 msg: CosmosMsg::Bank(BankMsg::Send {
                     to_address: "receiver".to_string(),
                     amount: vec![Coin {
@@ -361,7 +369,7 @@ mod tests {
                     }],
                 }),
                 gas_limit: None,
-                reply_on: ReplyOn::Never
+                reply_on: ReplyOn::Success
             }
         );
         assert_eq!(
@@ -387,11 +395,13 @@ mod tests {
         };
 
         let current_tx = LSInfo {
+            sender: Addr::unchecked("sender"),
             receiver: Addr::unchecked("ibcreceiver"),
             transfer_channel: Some("channel-0".to_string()),
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
+            balance_change: Uint128::new(1000u128),
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -402,7 +412,7 @@ mod tests {
         assert_eq!(
             res.messages[0],
             SubMsg {
-                id: 0,
+                id: 2,
                 msg: CosmosMsg::Stargate {
                     type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
                     value: MsgTransfer {
@@ -424,7 +434,7 @@ mod tests {
                     .into(),
                 },
                 gas_limit: None,
-                reply_on: ReplyOn::Never
+                reply_on: ReplyOn::Success
             }
         );
         assert_eq!(
@@ -434,6 +444,54 @@ mod tests {
                 attr("transfer_channel", "channel-0"),
                 attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
                 attr("receiver", "ibcreceiver")
+            ]
+        );
+    }
+
+    #[test]
+    fn handle_transfer_reply_with_ibc_transfer_out() {
+        let (mut deps, _env, _info) = default_instantiate();
+
+        let msg = Reply {
+            id: 2,
+            result: cosmwasm_std::SubMsgResult::Err("error".to_string()),
+        };
+
+        let current_tx = LSInfo {
+            sender: Addr::unchecked("sender"),
+            receiver: Addr::unchecked("ibcreceiver"),
+            transfer_channel: Some("channel-0".to_string()),
+            ibc_denom: NATIVE_IBC_DENOM.to_string(),
+            ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
+            prev_ls_token_balance: Uint128::new(1000u128),
+            balance_change: Uint128::new(1000u128),
+        };
+        CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
+
+        let res = handle_transfer_reply(deps.as_mut(), mock_env(), msg).unwrap();
+
+        assert_eq!(
+            res.messages[0],
+            SubMsg {
+                id: 0,
+                msg: CosmosMsg::Bank(BankMsg::Send {
+                    to_address: "sender".to_string(),
+                    amount: vec![Coin {
+                        denom: LIQUIDSTAKE_DENOM.to_string(),
+                        amount: Uint128::new(1000u128),
+                    }],
+                }),
+                gas_limit: None,
+                reply_on: ReplyOn::Never
+            }
+        );
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("method", "handle_transfer_reply"),
+                attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
+                attr("receiver", "ibcreceiver"),
+                attr("sender", "sender")
             ]
         );
     }

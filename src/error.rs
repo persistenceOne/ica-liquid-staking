@@ -25,8 +25,8 @@ pub enum ContractError {
     #[error("Payment error: {0}")]
     PaymentError(String),
 
-    #[error("Unknown reply id")]
-    UnknownReplyId {},
+    #[error("Unknown reply id: {id}")]
+    UnknownReplyId { id: u64 },
 
     #[error("Parse reply error: {0}")]
     ParseReplyError(String),
@@ -36,6 +36,9 @@ pub enum ContractError {
 
     #[error("Subcall error: {0}")]
     SubcallError(String),
+
+    #[error("No claimable tokens")]
+    NoClaimableTokens {},
 }
 
 impl From<OverflowError> for ContractError {

@@ -19,8 +19,10 @@ msg=$(cat << EOF
 EOF
 )
 
+AMOUNT="100ibc/6AE2756AA7EAA8FA06E11472EA05CA681BD8D3FBC1AAA9F06C79D1EC1C90DC9B"
+
 echo ">>> $PCORED tx wasm execute $contract_address $msg"
-tx_hash=$($PCORED tx wasm execute $contract_address "$msg" --from test1 -y $GAS --amount 100ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2 | jq -r .txhash)
+tx_hash=$($PCORED tx wasm execute $contract_address "$msg" --from $USER -y $GAS --amount $AMOUNT --chain-id $CHAIN_ID | jq -r .txhash)
 
 echo "Tx Hash: $tx_hash"
 echo $tx_hash > $METADATA/ls_tx_hash.txt

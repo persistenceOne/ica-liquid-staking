@@ -7,11 +7,13 @@ use crate::msg::{IbcConfig, LsConfig};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LSInfo {
+    pub sender: Addr,
     pub receiver: Addr,
     pub transfer_channel: Option<String>,
     pub ibc_denom: String,
     pub ls_token_denom: String,
     pub prev_ls_token_balance: Uint128,
+    pub balance_change: Uint128,
 }
 
 /// configuration relevant to entering into an LS

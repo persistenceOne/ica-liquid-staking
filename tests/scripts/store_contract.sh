@@ -9,7 +9,7 @@ CONTRACT=./artifacts/ica_liquid_staking.wasm
 echo "Storing contract..."
 
 echo ">>> $PCORED tx wasm store $CONTRACT"
-tx=$($PCORED tx wasm store $CONTRACT $GAS --from test1 -y)
+tx=$($PCORED tx wasm store $CONTRACT $GAS --from $USER -y --chain-id $CHAIN_ID)
 echo $tx
 tx_hash=$(echo $tx | jq -r .txhash)
 

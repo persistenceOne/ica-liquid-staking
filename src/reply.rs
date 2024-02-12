@@ -1,13 +1,15 @@
-use cosmwasm_std::{ensure, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response};
+use cosmwasm_std::{ensure, BankMsg, Coin, CosmosMsg, DepsMut, Env, Reply, Response, SubMsg};
 use persistence_std::types::ibc::applications::transfer::v1::MsgTransfer;
 
 use crate::{
+    contract::TRANSFER_REPLY_ID,
     state::{CURRENT_TX, IBC_CONFIG},
     ContractError,
 };
 
 pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    deps.api.debug("WASMDEBUG: ls reply");
+    deps.api
+        .debug(format!("WASMDEBUG: ls reply msg: {msg:?}").as_str());
 
     ensure!(
         msg.result.is_ok(),
@@ -15,10 +17,7 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
     );
 
     // load interim state
-    let current_tx = CURRENT_TX.load(deps.storage)?;
-
-    // delete interim state
-    CURRENT_TX.remove(deps.storage);
+    let mut current_tx = CURRENT_TX.load(deps.storage)?;
 
     // get contract balance of ls asset
     let current_ls_token_balance = deps.querier.query_balance(
@@ -27,6 +26,10 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
     )?;
 
     let balance_diff = current_ls_token_balance.amount - current_tx.prev_ls_token_balance;
+
+    // update interim state
+    current_tx.balance_change = balance_diff;
+    CURRENT_TX.save(deps.storage, &current_tx)?;
 
     let mut res = Response::default().add_attribute("method", "handle_ls_reply");
 
@@ -83,7 +86,43 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
     };
 
     Ok(res
-        .add_message(bank_send_msg)
+        .add_submessage(SubMsg::reply_on_success(bank_send_msg, TRANSFER_REPLY_ID))
         .add_attribute("minted_lst_amount", balance_diff.to_string())
         .add_attribute("receiver", current_tx.receiver.to_string()))
+}
+
+pub fn handle_transfer_reply(
+    deps: DepsMut,
+    _env: Env,
+    msg: Reply,
+) -> Result<Response, ContractError> {
+    deps.api
+        .debug(format!("WASMDEBUG: transfer reply msg: {msg:?}").as_str());
+
+    let res = Response::default().add_attribute("method", "handle_transfer_reply");
+
+    if msg.result.is_ok() {
+        // delete interim state
+        CURRENT_TX.remove(deps.storage);
+
+        return Ok(res);
+    }
+
+    // load interim state
+    let current_tx = CURRENT_TX.load(deps.storage)?;
+
+    // delete interim state
+    CURRENT_TX.remove(deps.storage);
+
+    Ok(res
+        .add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: current_tx.sender.clone().to_string(),
+            amount: vec![Coin {
+                denom: current_tx.ls_token_denom,
+                amount: current_tx.balance_change,
+            }],
+        }))
+        .add_attribute("minted_lst_amount", current_tx.balance_change.to_string())
+        .add_attribute("receiver", current_tx.receiver.to_string())
+        .add_attribute("sender", current_tx.sender.to_string()))
 }
