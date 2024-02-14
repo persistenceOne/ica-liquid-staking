@@ -13,6 +13,12 @@ pub enum ContractError {
     #[error("Not active")]
     NotActive {},
 
+    #[error("No funds")]
+    NoFunds {},
+
+    #[error("Too many funds")]
+    TooManyFunds {},
+
     #[error("Invalid denom: {denom}")]
     InvalidDenom { denom: String },
 

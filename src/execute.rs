@@ -31,6 +31,13 @@ pub fn try_liquid_staking(
         return Err(ContractError::NotActive {});
     }
 
+    if info.funds.len() == 0 {
+        return Err(ContractError::NoFunds {});
+    }
+    if info.funds.len() > 1 {
+        return Err(ContractError::TooManyFunds {});
+    }
+
     let native_ibc_denom = info.funds[0].denom.clone();
     let native_amount = info.funds[0].amount;
 
@@ -91,6 +98,7 @@ pub fn try_liquid_staking(
             LS_REPLY_ID,
         ))
         .add_attribute("action", "liquid_stake")
+        .add_attribute("sender", info.sender.to_string())
         .add_attribute("native_amount", native_amount.to_string())
         .add_attribute("native_ibc_denom", native_ibc_denom)
         .add_attribute("native_base_denom", native_base_denom)
@@ -131,9 +139,9 @@ pub fn update_config(
     }
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
-    // update ibc config
-    let mut ibc_config = IBC_CONFIG.load(deps.storage)?;
     if let Some(timeouts) = timeouts {
+        // update ibc config
+        let mut ibc_config = IBC_CONFIG.load(deps.storage)?;
         ibc_config.ica_timeout = timeouts.ica_timeout;
         ibc_config.ibc_transfer_timeout = timeouts.ibc_transfer_timeout;
 
@@ -143,8 +151,9 @@ pub fn update_config(
                 "ibc_transfer_timeout",
                 ibc_config.ibc_transfer_timeout.to_string(),
             );
+
+        IBC_CONFIG.save(deps.storage, &ibc_config)?;
     }
-    IBC_CONFIG.save(deps.storage, &ibc_config)?;
 
     Ok(res)
 }

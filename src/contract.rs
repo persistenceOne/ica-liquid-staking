@@ -3,7 +3,6 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
 };
-use cw2::set_contract_version;
 
 use crate::{
     error::ContractError,
@@ -17,10 +16,6 @@ use crate::{
 pub const LS_REPLY_ID: u64 = 1;
 pub const TRANSFER_REPLY_ID: u64 = 2;
 
-// version info for migration info
-const CONTRACT_NAME: &str = "crates.io:ica-liquid-staking";
-const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -29,7 +24,6 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls instantiate");
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let ls_config = LsConfig {
         admin: info.sender.clone(),
@@ -323,6 +317,7 @@ mod tests {
             res.attributes,
             vec![
                 attr("action", "liquid_stake"),
+                attr("sender", "anyone"),
                 attr("native_amount", deposit_amount.to_string()),
                 attr("native_ibc_denom", NATIVE_IBC_DENOM),
                 attr("native_base_denom", NATIVE_BASE_DENOM),
