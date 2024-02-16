@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::{
     error::ContractError,
-    execute::{try_claim, try_liquid_staking, update_config},
+    execute::{try_liquid_staking, update_config},
     msg::{ExecuteMsg, IbcConfig, InstantiateMsg, LsConfig, QueryMsg},
     query,
     reply::{handle_ls_reply, handle_transfer_reply},
@@ -63,15 +63,21 @@ pub fn execute(
         ExecuteMsg::LiquidStake {
             receiver,
             transfer_channel,
-        } => try_liquid_staking(deps, env, info, receiver, transfer_channel),
+            recovery_address,
+        } => try_liquid_staking(
+            deps,
+            env,
+            info,
+            receiver,
+            transfer_channel,
+            recovery_address,
+        ),
 
         ExecuteMsg::UpdateConfig {
             active,
             ls_prefix,
             timeouts,
         } => update_config(deps, env, info, active, ls_prefix, timeouts),
-
-        ExecuteMsg::Claim {} => try_claim(deps, env, info),
     }
 }
 
@@ -289,6 +295,7 @@ mod tests {
         let msg = ExecuteMsg::LiquidStake {
             receiver: Addr::unchecked("receiver"),
             transfer_channel: None,
+            recovery_address: None,
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(1, res.messages.len());
@@ -340,13 +347,13 @@ mod tests {
         };
 
         let current_tx = LSInfo {
-            sender: Addr::unchecked("sender"),
             receiver: Addr::unchecked("receiver"),
             transfer_channel: None,
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
             balance_change: Uint128::new(1000u128),
+            recovery_address: None,
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -355,7 +362,7 @@ mod tests {
         assert_eq!(
             res.messages[0],
             SubMsg {
-                id: 2,
+                id: 0,
                 msg: CosmosMsg::Bank(BankMsg::Send {
                     to_address: "receiver".to_string(),
                     amount: vec![Coin {
@@ -364,7 +371,7 @@ mod tests {
                     }],
                 }),
                 gas_limit: None,
-                reply_on: ReplyOn::Success
+                reply_on: ReplyOn::Never
             }
         );
         assert_eq!(
@@ -390,13 +397,13 @@ mod tests {
         };
 
         let current_tx = LSInfo {
-            sender: Addr::unchecked("sender"),
             receiver: Addr::unchecked("ibcreceiver"),
             transfer_channel: Some("channel-0".to_string()),
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
             balance_change: Uint128::new(1000u128),
+            recovery_address: None,
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -453,13 +460,13 @@ mod tests {
         };
 
         let current_tx = LSInfo {
-            sender: Addr::unchecked("sender"),
             receiver: Addr::unchecked("ibcreceiver"),
             transfer_channel: Some("channel-0".to_string()),
             ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
             balance_change: Uint128::new(1000u128),
+            recovery_address: Some(Addr::unchecked("recovery")),
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -470,7 +477,7 @@ mod tests {
             SubMsg {
                 id: 0,
                 msg: CosmosMsg::Bank(BankMsg::Send {
-                    to_address: "sender".to_string(),
+                    to_address: "recovery".to_string(),
                     amount: vec![Coin {
                         denom: LIQUIDSTAKE_DENOM.to_string(),
                         amount: Uint128::new(1000u128),
@@ -486,7 +493,7 @@ mod tests {
                 attr("method", "handle_transfer_reply"),
                 attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
                 attr("receiver", "ibcreceiver"),
-                attr("sender", "sender")
+                attr("sender", "recovery")
             ]
         );
     }

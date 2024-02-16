@@ -40,6 +40,10 @@ pub enum ExecuteMsg {
         /// If None, no IBC transfer will be executed
         /// If set, then `receiver` must be an IBC address
         transfer_channel: Option<String>,
+        /// Recovery address on Persistence chain
+        /// Required for IBC transfers of staked tokens
+        /// If None, no IBC transfer will be executed
+        recovery_address: Option<Addr>,
     },
     /// Update the contract configuration
     UpdateConfig {
@@ -50,8 +54,6 @@ pub enum ExecuteMsg {
         /// IBC timeouts
         timeouts: Option<Timeouts>,
     },
-    /// Claim sent tokens
-    Claim {},
 }
 
 #[cw_serde]

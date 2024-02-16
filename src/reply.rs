@@ -33,10 +33,8 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
 
     let mut res = Response::default().add_attribute("method", "handle_ls_reply");
 
-    let bank_send_msg = match current_tx.transfer_channel.clone() {
+    res = match current_tx.transfer_channel.clone() {
         Some(v) => {
-            res = res.add_attribute("transfer_channel", v.clone());
-
             let ibc_config = IBC_CONFIG.load(deps.storage)?;
 
             // we define the persistence->host_chain timeout to be equal to:
@@ -54,7 +52,7 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
             // make ibc transfer
             let msg_transfer = MsgTransfer {
                 source_port: "transfer".to_string(),
-                source_channel: v,
+                source_channel: v.clone(),
                 token: Some(
                     Coin {
                         denom: current_tx.ls_token_denom,
@@ -68,25 +66,28 @@ pub fn handle_ls_reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, 
                 timeout_timestamp: msg_transfer_timeout.nanos(),
                 memo: "".to_string(),
             };
-            CosmosMsg::Stargate {
+
+            let cosmos_msg = CosmosMsg::Stargate {
                 type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
                 value: msg_transfer.into(),
-            }
+            };
+
+            res.add_submessage(SubMsg::reply_on_success(cosmos_msg, TRANSFER_REPLY_ID))
+                .add_attribute("transfer_channel", v)
         }
         None => {
             // send to receiver
-            CosmosMsg::Bank(BankMsg::Send {
+            res.add_message(CosmosMsg::Bank(BankMsg::Send {
                 to_address: current_tx.receiver.clone().to_string(),
                 amount: vec![Coin {
                     denom: current_tx.ls_token_denom,
                     amount: balance_diff,
                 }],
-            })
+            }))
         }
     };
 
     Ok(res
-        .add_submessage(SubMsg::reply_on_success(bank_send_msg, TRANSFER_REPLY_ID))
         .add_attribute("minted_lst_amount", balance_diff.to_string())
         .add_attribute("receiver", current_tx.receiver.to_string()))
 }
@@ -114,9 +115,14 @@ pub fn handle_transfer_reply(
     // delete interim state
     CURRENT_TX.remove(deps.storage);
 
+    let recovery_address = match current_tx.recovery_address {
+        Some(v) => v,
+        None => return Err(ContractError::InvalidRecoveryAddress {}),
+    };
+
     Ok(res
         .add_message(CosmosMsg::Bank(BankMsg::Send {
-            to_address: current_tx.sender.clone().to_string(),
+            to_address: recovery_address.clone().to_string(),
             amount: vec![Coin {
                 denom: current_tx.ls_token_denom,
                 amount: current_tx.balance_change,
@@ -124,5 +130,5 @@ pub fn handle_transfer_reply(
         }))
         .add_attribute("minted_lst_amount", current_tx.balance_change.to_string())
         .add_attribute("receiver", current_tx.receiver.to_string())
-        .add_attribute("sender", current_tx.sender.to_string()))
+        .add_attribute("sender", recovery_address.to_string()))
 }

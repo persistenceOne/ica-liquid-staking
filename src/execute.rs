@@ -1,6 +1,5 @@
 use cosmwasm_std::{
-    Addr, BankMsg, Coin, CosmosMsg, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg,
-    Uint128,
+    Addr, CosmosMsg, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg, Uint128,
 };
 use persistence_std::types::{
     cosmos::base::v1beta1::Coin as StdCoin,
@@ -16,6 +15,7 @@ use crate::{
 };
 
 pub const DENOM_TRACE_QUERY_TYPE: &str = "/ibc.applications.transfer.v1.Query/DenomTrace";
+const PERSISTENCE_ADDRESS_PREFIX: &str = "persistence";
 
 pub fn try_liquid_staking(
     deps: DepsMut,
@@ -23,6 +23,7 @@ pub fn try_liquid_staking(
     info: MessageInfo,
     receiver: Addr,
     transfer_channel: Option<String>,
+    recovery_address: Option<Addr>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls execute");
 
@@ -31,11 +32,27 @@ pub fn try_liquid_staking(
         return Err(ContractError::NotActive {});
     }
 
-    if info.funds.len() == 0 {
+    // validate funds
+    if info.funds.is_empty() {
         return Err(ContractError::NoFunds {});
     }
     if info.funds.len() > 1 {
         return Err(ContractError::TooManyFunds {});
+    }
+
+    // validate transfer channel and recovery address
+    if transfer_channel.is_some() && recovery_address.is_none() {
+        return Err(ContractError::InvalidRecoveryAddress {});
+    }
+
+    // recovery address must have prefix "persistence"
+    if let Some(recovery_address) = recovery_address.clone() {
+        if !recovery_address
+            .to_string()
+            .starts_with(PERSISTENCE_ADDRESS_PREFIX)
+        {
+            return Err(ContractError::InvalidRecoveryAddress {});
+        }
     }
 
     let native_ibc_denom = info.funds[0].denom.clone();
@@ -70,13 +87,13 @@ pub fn try_liquid_staking(
 
     // save interim state
     let current_tx = LSInfo {
-        sender: info.sender.clone(),
         receiver: receiver.clone(),
         transfer_channel: transfer_channel.clone(),
         ibc_denom: native_ibc_denom.clone(),
         ls_token_denom: ls_token_denom.clone(),
         prev_ls_token_balance: contract_ls_token_balance.amount,
         balance_change: Uint128::zero(),
+        recovery_address: recovery_address.clone(),
     };
     CURRENT_TX.save(deps.storage, &current_tx)?;
 
@@ -154,45 +171,6 @@ pub fn update_config(
 
         IBC_CONFIG.save(deps.storage, &ibc_config)?;
     }
-
-    Ok(res)
-}
-
-pub fn try_claim(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    deps.api.debug("WASMDEBUG: claim");
-
-    let config = LS_CONFIG.load(deps.storage)?;
-    if !config.active {
-        return Err(ContractError::NotActive {});
-    }
-
-    let current_tx = CURRENT_TX.load(deps.storage)?;
-    if current_tx.receiver != info.sender {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    let contract_ls_token_balance = deps.querier.query_balance(
-        env.contract.address.clone(),
-        current_tx.ls_token_denom.clone(),
-    )?;
-
-    if contract_ls_token_balance.amount <= current_tx.prev_ls_token_balance {
-        return Err(ContractError::NoClaimableTokens {});
-    }
-
-    let amount = contract_ls_token_balance.amount - current_tx.prev_ls_token_balance;
-
-    let res = Response::new()
-        .add_message(CosmosMsg::Bank(BankMsg::Send {
-            to_address: current_tx.sender.to_string(),
-            amount: vec![Coin {
-                denom: current_tx.ibc_denom,
-                amount,
-            }],
-        }))
-        .add_attribute("action", "claim")
-        .add_attribute("amount", amount.to_string())
-        .add_attribute("receiver", current_tx.receiver.to_string());
 
     Ok(res)
 }
