@@ -31,8 +31,8 @@ pub enum ContractError {
     #[error("Payment error: {0}")]
     PaymentError(String),
 
-    #[error("Invalid recovery address")]
-    InvalidRecoveryAddress {},
+    #[error("Invalid receiver address: {receiver}")]
+    InvalidReceiverAddress { receiver: String },
 
     #[error("Unknown reply id: {id}")]
     UnknownReplyId { id: u64 },

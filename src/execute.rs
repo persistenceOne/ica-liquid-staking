@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    Addr, CosmosMsg, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg, Uint128,
+    Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, QueryRequest, Response, SubMsg,
 };
 use persistence_std::types::{
     cosmos::base::v1beta1::Coin as StdCoin,
@@ -9,8 +9,7 @@ use persistence_std::types::{
 
 use crate::{
     contract::LS_REPLY_ID,
-    msg::Timeouts,
-    state::{LSInfo, CURRENT_TX, IBC_CONFIG, LS_CONFIG},
+    state::{LSInfo, CURRENT_TX, LS_CONFIG},
     ContractError,
 };
 
@@ -20,10 +19,9 @@ const PERSISTENCE_ADDRESS_PREFIX: &str = "persistence";
 pub fn try_liquid_staking(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
-    receiver: Addr,
-    transfer_channel: Option<String>,
-    recovery_address: Option<Addr>,
+    coin: Coin,
+    sender: Addr,
+    mut receiver: Addr,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: ls execute");
 
@@ -32,31 +30,25 @@ pub fn try_liquid_staking(
         return Err(ContractError::NotActive {});
     }
 
-    // validate funds
-    if info.funds.is_empty() {
-        return Err(ContractError::NoFunds {});
-    }
-    if info.funds.len() > 1 {
-        return Err(ContractError::TooManyFunds {});
-    }
-
-    // validate transfer channel and recovery address
-    if transfer_channel.is_some() && recovery_address.is_none() {
-        return Err(ContractError::InvalidRecoveryAddress {});
-    }
-
-    // recovery address must have prefix "persistence"
-    if let Some(recovery_address) = recovery_address.clone() {
-        if !recovery_address
-            .to_string()
-            .starts_with(PERSISTENCE_ADDRESS_PREFIX)
-        {
-            return Err(ContractError::InvalidRecoveryAddress {});
+    // validate receiver address
+    receiver = match deps.api.addr_validate(receiver.as_str()) {
+        Ok(v) => v,
+        Err(_) => {
+            return Err(ContractError::InvalidReceiverAddress {
+                receiver: receiver.to_string(),
+            });
         }
+    };
+
+    // receiver address must have prefix "persistence"
+    if !receiver.to_string().starts_with(PERSISTENCE_ADDRESS_PREFIX) {
+        return Err(ContractError::InvalidReceiverAddress {
+            receiver: receiver.to_string(),
+        });
     }
 
-    let native_ibc_denom = info.funds[0].denom.clone();
-    let native_amount = info.funds[0].amount;
+    let native_ibc_denom = coin.denom.clone();
+    let native_amount = coin.amount;
 
     // get base denom by querying denom trace
     let query_denom_trace_request = QueryDenomTraceRequest {
@@ -88,12 +80,8 @@ pub fn try_liquid_staking(
     // save interim state
     let current_tx = LSInfo {
         receiver: receiver.clone(),
-        transfer_channel: transfer_channel.clone(),
-        ibc_denom: native_ibc_denom.clone(),
         ls_token_denom: ls_token_denom.clone(),
         prev_ls_token_balance: contract_ls_token_balance.amount,
-        balance_change: Uint128::zero(),
-        recovery_address: recovery_address.clone(),
     };
     CURRENT_TX.save(deps.storage, &current_tx)?;
 
@@ -115,7 +103,7 @@ pub fn try_liquid_staking(
             LS_REPLY_ID,
         ))
         .add_attribute("action", "liquid_stake")
-        .add_attribute("sender", info.sender.to_string())
+        .add_attribute("sender", sender.to_string())
         .add_attribute("native_amount", native_amount.to_string())
         .add_attribute("native_ibc_denom", native_ibc_denom)
         .add_attribute("native_base_denom", native_base_denom)
@@ -130,7 +118,6 @@ pub fn update_config(
     info: MessageInfo,
     active: Option<bool>,
     ls_prefix: Option<String>,
-    timeouts: Option<Timeouts>,
 ) -> Result<Response, ContractError> {
     deps.api.debug("WASMDEBUG: update config");
 
@@ -155,22 +142,6 @@ pub fn update_config(
         res = res.add_attribute("ls_prefix", ls_config.clone().ls_prefix);
     }
     LS_CONFIG.save(deps.storage, &ls_config)?;
-
-    if let Some(timeouts) = timeouts {
-        // update ibc config
-        let mut ibc_config = IBC_CONFIG.load(deps.storage)?;
-        ibc_config.ica_timeout = timeouts.ica_timeout;
-        ibc_config.ibc_transfer_timeout = timeouts.ibc_transfer_timeout;
-
-        res = res
-            .add_attribute("ica_timeout", ibc_config.ica_timeout.to_string())
-            .add_attribute(
-                "ibc_transfer_timeout",
-                ibc_config.ibc_transfer_timeout.to_string(),
-            );
-
-        IBC_CONFIG.save(deps.storage, &ibc_config)?;
-    }
 
     Ok(res)
 }

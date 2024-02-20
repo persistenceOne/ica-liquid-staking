@@ -3,14 +3,15 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult,
 };
+use cw_utils::one_coin;
 
 use crate::{
     error::ContractError,
     execute::{try_liquid_staking, update_config},
-    msg::{ExecuteMsg, IbcConfig, InstantiateMsg, LsConfig, QueryMsg},
+    msg::{ExecuteMsg, InstantiateMsg, LsConfig, QueryMsg},
     query,
-    reply::{handle_ls_reply, handle_transfer_reply},
-    state::{IBC_CONFIG, LS_CONFIG},
+    reply::handle_ls_reply,
+    state::LS_CONFIG,
 };
 
 pub const LS_REPLY_ID: u64 = 1;
@@ -32,24 +33,11 @@ pub fn instantiate(
     };
     LS_CONFIG.save(deps.storage, &ls_config)?;
 
-    let timeouts = msg.timeouts.unwrap_or_default();
-
-    // ibc fees and timeouts
-    IBC_CONFIG.save(
-        deps.storage,
-        &IbcConfig {
-            ibc_transfer_timeout: timeouts.ibc_transfer_timeout,
-            ica_timeout: timeouts.ica_timeout,
-        },
-    )?;
-
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("owner", info.sender.to_string())
         .add_attribute("active", "true")
-        .add_attribute("ls_prefix", msg.ls_prefix)
-        .add_attribute("ica_timeout", timeouts.ica_timeout)
-        .add_attribute("ibc_transfer_timeout", timeouts.ibc_transfer_timeout))
+        .add_attribute("ls_prefix", msg.ls_prefix))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -60,24 +48,14 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::LiquidStake {
-            receiver,
-            transfer_channel,
-            recovery_address,
-        } => try_liquid_staking(
-            deps,
-            env,
-            info,
-            receiver,
-            transfer_channel,
-            recovery_address,
-        ),
+        ExecuteMsg::LiquidStake { receiver } => {
+            let coin = one_coin(&info)?;
+            try_liquid_staking(deps, env, coin, info.sender, receiver)
+        }
 
-        ExecuteMsg::UpdateConfig {
-            active,
-            ls_prefix,
-            timeouts,
-        } => update_config(deps, env, info, active, ls_prefix, timeouts),
+        ExecuteMsg::UpdateConfig { active, ls_prefix } => {
+            update_config(deps, env, info, active, ls_prefix)
+        }
     }
 }
 
@@ -85,7 +63,6 @@ pub fn execute(
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     match msg.id {
         LS_REPLY_ID => handle_ls_reply(deps, env, msg),
-        TRANSFER_REPLY_ID => handle_transfer_reply(deps, env, msg),
         _ => Err(ContractError::UnknownReplyId { id: msg.id }),
     }
 }
@@ -102,7 +79,6 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::execute::DENOM_TRACE_QUERY_TYPE;
-    use crate::msg::Timeouts;
     use crate::state::{LSInfo, CURRENT_TX};
 
     use super::*;
@@ -110,9 +86,8 @@ mod tests {
     use cosmwasm_std::{
         attr, coins, from_json, Addr, BalanceResponse, BankMsg, BankQuery, Coin, ContractResult,
         CosmosMsg, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, ReplyOn, SubMsg,
-        SubMsgResponse, SystemError, SystemResult, Uint128, Uint64,
+        SubMsgResponse, SystemError, SystemResult, Uint128,
     };
-    use persistence_std::types::ibc::applications::transfer::v1::MsgTransfer;
     use persistence_std::types::{
         cosmos::base::v1beta1::Coin as StdCoin,
         ibc::applications::transfer::v1::{
@@ -221,7 +196,6 @@ mod tests {
 
         let msg = InstantiateMsg {
             ls_prefix: "stk/".to_string(),
-            timeouts: None,
         };
 
         let resp = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -232,8 +206,6 @@ mod tests {
                 attr("owner", "creator"),
                 attr("active", "true"),
                 attr("ls_prefix", "stk/"),
-                attr("ica_timeout", "18000"),
-                attr("ibc_transfer_timeout", "18000"),
             ]
         );
 
@@ -260,10 +232,6 @@ mod tests {
         let msg = ExecuteMsg::UpdateConfig {
             active: Some(false),
             ls_prefix: Some("newprefix/".to_string()),
-            timeouts: Some(Timeouts {
-                ica_timeout: Uint64::new(10000u64),
-                ibc_transfer_timeout: Uint64::new(10000u64),
-            }),
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(
@@ -272,8 +240,6 @@ mod tests {
                 attr("method", "update_config"),
                 attr("active", "false"),
                 attr("ls_prefix", "newprefix/"),
-                attr("ica_timeout", "10000"),
-                attr("ibc_transfer_timeout", "10000"),
             ]
         );
 
@@ -285,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn liquid_stake() {
+    fn test_liquid_stake() {
         let (mut deps, _env, _info) = default_instantiate();
 
         let deposit_amount = Uint128::from(2000u128);
@@ -293,9 +259,7 @@ mod tests {
         // beneficiary can release it
         let info = mock_info("anyone", &coins(deposit_amount.into(), NATIVE_IBC_DENOM));
         let msg = ExecuteMsg::LiquidStake {
-            receiver: Addr::unchecked("receiver"),
-            transfer_channel: None,
-            recovery_address: None,
+            receiver: Addr::unchecked("persistencereceiver"),
         };
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(1, res.messages.len());
@@ -329,13 +293,13 @@ mod tests {
                 attr("native_ibc_denom", NATIVE_IBC_DENOM),
                 attr("native_base_denom", NATIVE_BASE_DENOM),
                 attr("ls_token_denom", LIQUIDSTAKE_DENOM),
-                attr("receiver", "receiver"),
+                attr("receiver", "persistencereceiver"),
             ]
         );
     }
 
     #[test]
-    fn handle_ls_reply_with_ica_transfer_out() {
+    fn test_ls_reply() {
         let (mut deps, _env, _info) = default_instantiate();
 
         let msg = Reply {
@@ -348,12 +312,8 @@ mod tests {
 
         let current_tx = LSInfo {
             receiver: Addr::unchecked("receiver"),
-            transfer_channel: None,
-            ibc_denom: NATIVE_IBC_DENOM.to_string(),
             ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
             prev_ls_token_balance: Uint128::new(1000u128),
-            balance_change: Uint128::new(1000u128),
-            recovery_address: None,
         };
         CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
 
@@ -385,116 +345,35 @@ mod tests {
     }
 
     #[test]
-    fn handle_ls_reply_with_ibc_transfer_out() {
-        let (mut deps, env, _info) = default_instantiate();
+    fn test_deactivate() {
+        let (mut deps, _env, info) = default_instantiate();
 
-        let msg = Reply {
-            id: 1,
-            result: cosmwasm_std::SubMsgResult::Ok(SubMsgResponse {
-                events: vec![],
-                data: Some(to_json_binary("response").unwrap()),
-            }),
+        let msg = ExecuteMsg::UpdateConfig {
+            active: Some(false),
+            ls_prefix: None,
         };
-
-        let current_tx = LSInfo {
-            receiver: Addr::unchecked("ibcreceiver"),
-            transfer_channel: Some("channel-0".to_string()),
-            ibc_denom: NATIVE_IBC_DENOM.to_string(),
-            ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
-            prev_ls_token_balance: Uint128::new(1000u128),
-            balance_change: Uint128::new(1000u128),
-            recovery_address: None,
-        };
-        CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
-
-        let res = handle_ls_reply(deps.as_mut(), mock_env(), msg).unwrap();
-
-        let msg_transfer_timeout = env.block.time.plus_seconds(18000).plus_seconds(18000);
-
-        assert_eq!(
-            res.messages[0],
-            SubMsg {
-                id: 2,
-                msg: CosmosMsg::Stargate {
-                    type_url: "/ibc.applications.transfer.v1.MsgTransfer".to_string(),
-                    value: MsgTransfer {
-                        source_port: "transfer".to_string(),
-                        source_channel: "channel-0".to_string(),
-                        token: Some(
-                            Coin {
-                                denom: LIQUIDSTAKE_DENOM.to_string(),
-                                amount: Uint128::new(1000u128),
-                            }
-                            .into()
-                        ),
-                        sender: "cosmos2contract".to_string(),
-                        receiver: "ibcreceiver".to_string(),
-                        timeout_height: None,
-                        timeout_timestamp: msg_transfer_timeout.nanos(),
-                        memo: "".to_string(),
-                    }
-                    .into(),
-                },
-                gas_limit: None,
-                reply_on: ReplyOn::Success
-            }
-        );
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(
             res.attributes,
-            vec![
-                attr("method", "handle_ls_reply"),
-                attr("transfer_channel", "channel-0"),
-                attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
-                attr("receiver", "ibcreceiver")
-            ]
+            vec![attr("method", "update_config"), attr("active", "false"),]
         );
-    }
 
-    #[test]
-    fn handle_transfer_reply_with_ibc_transfer_out() {
-        let (mut deps, _env, _info) = default_instantiate();
+        // it worked, let's query the state
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::LsConfig {}).unwrap();
+        let value: LsConfig = from_json(&res).unwrap();
+        assert_eq!(false, value.active);
 
-        let msg = Reply {
-            id: 2,
-            result: cosmwasm_std::SubMsgResult::Err("error".to_string()),
+        // ensure that liquid staking fails
+        let deposit_amount = Uint128::from(2000u128);
+        let info = mock_info("anyone", &coins(deposit_amount.into(), NATIVE_IBC_DENOM));
+        let msg = ExecuteMsg::LiquidStake {
+            receiver: Addr::unchecked("persistencereceiver"),
         };
 
-        let current_tx = LSInfo {
-            receiver: Addr::unchecked("ibcreceiver"),
-            transfer_channel: Some("channel-0".to_string()),
-            ibc_denom: NATIVE_IBC_DENOM.to_string(),
-            ls_token_denom: LIQUIDSTAKE_DENOM.to_string(),
-            prev_ls_token_balance: Uint128::new(1000u128),
-            balance_change: Uint128::new(1000u128),
-            recovery_address: Some(Addr::unchecked("recovery")),
-        };
-        CURRENT_TX.save(deps.as_mut().storage, &current_tx).unwrap();
-
-        let res = handle_transfer_reply(deps.as_mut(), mock_env(), msg).unwrap();
-
-        assert_eq!(
-            res.messages[0],
-            SubMsg {
-                id: 0,
-                msg: CosmosMsg::Bank(BankMsg::Send {
-                    to_address: "recovery".to_string(),
-                    amount: vec![Coin {
-                        denom: LIQUIDSTAKE_DENOM.to_string(),
-                        amount: Uint128::new(1000u128),
-                    }],
-                }),
-                gas_limit: None,
-                reply_on: ReplyOn::Never
-            }
-        );
-        assert_eq!(
-            res.attributes,
-            vec![
-                attr("method", "handle_transfer_reply"),
-                attr("minted_lst_amount", Uint128::new(1000u128).to_string()),
-                attr("receiver", "ibcreceiver"),
-                attr("sender", "recovery")
-            ]
-        );
+        let res = execute(deps.as_mut(), mock_env(), info, msg);
+        match res.unwrap_err() {
+            ContractError::NotActive {} => {}
+            e => panic!("Unexpected error: {:?}", e),
+        }
     }
 }
