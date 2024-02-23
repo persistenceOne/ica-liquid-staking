@@ -16,8 +16,8 @@ echo "Receiver Balance Before: $($PCORED q bank balances $receiver)"
 echo "Contract Balance Before: $contract_balance"
 echo "Contract Balance Before: $contract_balance" > $METADATA/contract_balance.txt
 
-echo ">>> $GAIAD tx ibc-transfer transfer transfer channel-0 $contract_address 100uatom --from test1 -y --memo $memo --gas auto --gas-adjustment 1.5 --fees 1000uatom"
-tx_hash=$($GAIAD tx ibc-transfer transfer transfer channel-0 $contract_address 100uatom --from test1 -y --memo "$memo" --gas auto --gas-adjustment 1.5 --fees 1000uatom | jq -r .txhash)
+echo ">>> $OSMOSISD tx ibc-transfer transfer transfer channel-12 $contract_address 100uosmo --from test1 -y --memo $memo --gas auto --gas-adjustment 1.5 --fees 1000uosmo"
+tx_hash=$($OSMOSISD tx ibc-transfer transfer transfer channel-12 $contract_address 100uosmo --from test1 -y --memo "$memo" --gas auto --gas-adjustment 1.5 --fees 1000uosmo | jq -r .txhash)
 
 echo "Tx Hash: $tx_hash"
 echo $tx_hash > $METADATA/ibc_ls_tx_hash.txt

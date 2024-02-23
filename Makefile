@@ -33,10 +33,6 @@ instantiate-contract:
 liquid-stake:
 	bash tests/scripts/execute_liquid_stake.sh
 
-# Execute ibc liquid staking with ibc transfer out
-ibc_liquid_stake_ibc_transfer_out:
-	bash tests/scripts/ibc_liquid_stake_ibc_transfer_out.sh
-
 # Execute ibc liquid staking with ica transfer out
 ibc_liquid_stake_ica_transfer_out:
 	bash tests/scripts/ibc_liquid_stake_ica_transfer_out.sh

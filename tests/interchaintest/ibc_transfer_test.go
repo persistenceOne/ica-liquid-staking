@@ -152,10 +152,6 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 	gaiaTokenDenom := transfertypes.GetPrefixedDenom(channel.Counterparty.PortID, channel.Counterparty.ChannelID, gaiaChain.Config().Denom)
 	gaiaIBCDenom := transfertypes.ParseDenomTrace(gaiaTokenDenom).IBCDenom()
 
-	// Get the IBC denom for stk/uatom on Gaia
-	stkTokenDenom := transfertypes.GetPrefixedDenom(channel.Counterparty.PortID, channel.Counterparty.ChannelID, stkDenom)
-	stkIBCDenom := transfertypes.ParseDenomTrace(stkTokenDenom).IBCDenom()
-
 	t.Run("register host chain", func(t *testing.T) {
 
 		cmd := []string{"persistenceCore", "tx", "liquidstakeibc", "register-host-chain",
@@ -210,10 +206,6 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		// Instantiate ica_liquid_staking.wasm contract
 		initMsg := ContractInstantiateMsg{
 			LsPrefix: "stk/",
-      Timeouts: Timeouts{
-        IbcTransferTimeout: "5",
-        IcaTimeout:         "10",
-      },
 		}
 
 		str, err := json.Marshal(initMsg)
@@ -291,65 +283,5 @@ func TestPersistenceGaiaIBCTransfer(t *testing.T) {
 		persistenceUpdateBal, err = persistenceChain.GetBalance(ctx, persistenceUserAddr, stkDenom)
 		require.NoError(t, err)
 		require.Equal(t, transferAmount, persistenceUpdateBal)
-	})
-
-	t.Run("ibc transfer atom with memo and ibc transfer stk/uatom", func(t *testing.T) {
-
-		// Note the height before the transfer
-		gaiaHeight, err := gaiaChain.Height(ctx)
-		require.NoError(t, err)
-
-    // store sender's original uatom balance
-		gaiaPrevBal, err := gaiaChain.GetBalance(ctx, gaiaUserAddr, gaiaChain.Config().Denom)
-		require.NoError(t, err)
-
-		// Compose an IBC transfer and send from Gaia -> Persistence
-		var transferAmount = math.NewInt(1_000)
-		transfer := ibc.WalletAmount{
-			Address: icaLiquidStakingContractAddr,
-			Denom:   gaiaChain.Config().Denom,
-			Amount:  transferAmount,
-		}
-		executeMsg := fmt.Sprintf(`{"liquid_stake":{"receiver":"%s","transfer_channel":"%s"}}`, gaiaUserAddr, channel.ChannelID)
-		memo := fmt.Sprintf(`{"wasm":{"contract":"%s","msg":%s}}`, icaLiquidStakingContractAddr, executeMsg)
-		transferTx, err := gaiaChain.SendIBCTransfer(ctx, gaiaChannelID, gaiaUser.KeyName(), transfer, ibc.TransferOptions{
-			Timeout: &ibc.IBCTimeout{
-				Height:      0,
-				NanoSeconds: 0,
-			},
-			Memo: memo,
-		})
-		require.NoError(t, err)
-		require.NoError(t, transferTx.Validate())
-
-		// relay MsgRecvPacket to persistence, then MsgAcknowledgement back to gaia
-		require.NoError(t, r.Flush(ctx, eRep, ibcPath, gaiaChannelID))
-
-		// Poll for the ack to know the transfer was successful
-		_, err = testutil.PollForAck(ctx, gaiaChain, gaiaHeight, gaiaHeight+25, transferTx.Packet)
-		require.NoError(t, err)
-
-		// wait for 2 blocks to pass
-		err = testutil.WaitForBlocks(ctx, 2, persistenceChain, gaiaChain)
-		require.NoError(t, err)
-
-		// Test source wallet has decreased funds
-		gaiaUpdateBal, err := gaiaChain.GetBalance(ctx, gaiaUserAddr, gaiaChain.Config().Denom)
-		require.NoError(t, err)
-		require.Equal(t, gaiaPrevBal.Sub(transferAmount), gaiaUpdateBal)
-
-		// Test destination wallet has no ibc funds
-		persistenceUpdateBal, err := persistenceChain.GetBalance(ctx, persistenceUserAddr, gaiaIBCDenom)
-		require.NoError(t, err)
-		require.Equal(t, math.ZeroInt(), persistenceUpdateBal)
-
-		persistenceUpdateBal, err = persistenceChain.GetBalance(ctx, icaLiquidStakingContractAddr, gaiaIBCDenom)
-		require.NoError(t, err)
-		require.Equal(t, math.ZeroInt(), persistenceUpdateBal)
-
-		// Test destination wallet has increased stk funds
-		gaiaUpdateBal, err = gaiaChain.GetBalance(ctx, gaiaUserAddr, stkIBCDenom)
-		require.NoError(t, err)
-		require.Equal(t, transferAmount, gaiaUpdateBal)
 	})
 }

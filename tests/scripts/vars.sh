@@ -9,10 +9,14 @@ mkdir -p $METADATA
 
 GAIAD="gaiad"
 PCORED="persistenceCore"
+OSMOSISD="osmosisd"
 
 GAS="--gas-prices 0.025uxprt --gas auto --gas-adjustment 1.5"
 
-$PCORED config node http://localhost:26657
-$GAIAD config node http://localhost:36657
+$PCORED config node https://rpc.testnet2.persistence.one:443
+$GAIAD config node https://cosmos-testnet-rpc.polkachu.com:443
+$OSMOSISD config node https://osmosis-testnet-rpc.polkachu.com:443
 
-CHAIN_ID="test-core-1"
+CHAIN_ID="test-core-2"
+
+USER="test2 --keyring-backend test"

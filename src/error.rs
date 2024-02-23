@@ -13,6 +13,12 @@ pub enum ContractError {
     #[error("Not active")]
     NotActive {},
 
+    #[error("No funds")]
+    NoFunds {},
+
+    #[error("Too many funds")]
+    TooManyFunds {},
+
     #[error("Invalid denom: {denom}")]
     InvalidDenom { denom: String },
 
@@ -25,8 +31,11 @@ pub enum ContractError {
     #[error("Payment error: {0}")]
     PaymentError(String),
 
-    #[error("Unknown reply id")]
-    UnknownReplyId {},
+    #[error("Invalid receiver address: {receiver}")]
+    InvalidReceiverAddress { receiver: String },
+
+    #[error("Unknown reply id: {id}")]
+    UnknownReplyId { id: u64 },
 
     #[error("Parse reply error: {0}")]
     ParseReplyError(String),
@@ -36,6 +45,9 @@ pub enum ContractError {
 
     #[error("Subcall error: {0}")]
     SubcallError(String),
+
+    #[error("No claimable tokens")]
+    NoClaimableTokens {},
 }
 
 impl From<OverflowError> for ContractError {
